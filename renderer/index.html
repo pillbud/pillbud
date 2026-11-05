@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; img-src 'self' file: data: blob: https:; media-src 'self' blob: data: mediasource:; style-src 'self' 'unsafe-inline' file:; script-src 'self' file:">
+  <title>pillbud</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-look="brand">
+  <div id="stage">
+    <div id="balloon" class="hidden" role="status" aria-live="polite">
+      <header>
+        <span id="title"></span>
+        <button id="close" title="Close">&#x2715;</button>
+      </header>
+      <p id="heard"></p>
+      <p id="text"></p>
+      <p id="status"></p>
+      <div id="scroll">
+        <div id="tiles"></div>
+        <ul id="findings"></ul>
+        <p id="change"></p>
+        <section id="read" class="hidden"></section>
+        <div id="numbers"></div>
+        <section id="details" class="hidden"></section>
+      </div>
+    </div>
+    <div id="buddy" title="Drag to move. Click and hold to ask a question.">
+      <div id="char"></div>
+      <div id="rec" class="hidden"><span class="dot"></span>listening</div>
+    </div>
+    <div id="chip" class="hidden"><img id="chip-img" alt=""><span id="chip-text"></span></div>
+  </div>
+  <script src="frames.js"></script>
+  <script src="sfx.js"></script>
+  <script src="textvoice.js"></script>
+  <script src="character.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

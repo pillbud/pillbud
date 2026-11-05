@@ -1,0 +1,248 @@
+/* pillbud's window is transparent: only the balloon, the character and the coin chip are drawn.
+   Type: one family (Segoe UI, Windows' own UI font, crisp at these sizes), each style one size and weight:
+     title 13.5px/600 · body 13.5px/400 · receipts 12px/400 · facts 11.5px/400 tabular · badge 10.5px/700 */
+:root {
+  --paper: #ffffe1; --ink: #1c1b17; --muted: #6a6550; --line: #b9b48f; --rule: #d9d4a8;
+  --good: #0d6b2a; --meh: #8a6400; --bad: #a3141a;
+  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; --font-title: var(--font);
+  /* the balloon look (tray, then Balloon look) overrides these; Classic is the Windows 98 tooltip */
+  --edge: #000; --edge-w: 1px; --radius: 8px; --shadow: 2px 2px 0 rgba(0, 0, 0, .2); --drop: none; --pad: 12px 14px 12px;
+  --tile: #fffff4; --dot: #a29d7c; --ic-fg: #fff; --title: var(--ink);
+}
+html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; user-select: none; }
+body { font: 400 13.5px/1.42 var(--font); color: var(--ink); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+#stage { position: relative; width: 100%; height: 100%; }
+.hidden { display: none !important; }
+
+/* Windows 98 tooltip balloon: #FFFFE1, thin black border, its tail pointing down-left at the buddy's head.
+   Layout (V3 art, a 225 x 250 box at left 12 / bottom 36): the head top rests 78 px below the box top and the body spans
+   x 35-200, so the balloon sits above and to the right of the head, its tail tip just over the box top (the pump jump
+   reaches the box's top edge: the balloon never covers the box). */
+/* Balloon size: CSS zoom scales the balloon's text, boxes and tail together (--z, from the tray). Zoom also scales the
+   balloon's own offsets, so they're divided by it to keep the tail on pillbud's head at every size. */
+#balloon {
+  zoom: var(--z, 1);
+  position: absolute; left: calc(100px / var(--z, 1)); bottom: calc((36px + var(--buddy-h, 250px) + 20px) / var(--z, 1)); width: 318px; box-sizing: border-box;
+  max-height: calc((100vh - 36px - var(--buddy-h, 250px) - 28px) / var(--z, 1)); display: flex; flex-direction: column;
+  background: var(--paper); border: var(--edge-w) solid var(--edge); border-radius: var(--radius); padding: var(--pad);
+  box-shadow: var(--shadow); filter: var(--drop); transition: opacity .2s;
+}
+#balloon::before, #balloon::after { content: ""; position: absolute; width: 0; height: 0; border-style: solid; }
+#balloon::before { left: 22px; bottom: -19px; border-width: 19px 21px 0 0; border-color: var(--edge) transparent transparent transparent; }
+#balloon::after { left: 23px; bottom: -17px; border-width: 17px 19px 0 0; border-color: var(--paper) transparent transparent transparent; }
+#balloon.hidden { display: flex !important; opacity: 0; pointer-events: none; }
+
+header { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px; min-height: 18px; }
+#title { font-family: var(--font-title); color: var(--title); font-weight: 600; font-size: 13.5px; line-height: 1.3; flex: 1 1 auto; min-width: 0; text-wrap: balance; overflow-wrap: anywhere; }
+#title:empty { display: none; }
+#badge { flex: none; font-size: 10.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; padding: 2px 7px; border-radius: 9px; color: #fff; line-height: 1.35; white-space: nowrap; }
+#badge.ok { background: var(--good); } #badge.meh { background: var(--meh); } #badge.bad { background: var(--bad); }
+#close {
+  flex: none; align-self: flex-start; width: 16px; height: 14px; margin-left: auto; padding: 0; font: 9px/12px var(--font);
+  background: #c0c0c0; border: 1px solid; border-color: #fff #404040 #404040 #fff; box-shadow: inset -1px -1px #808080; cursor: default;
+}
+#close:active { border-color: #404040 #fff #fff #404040; }
+
+p { margin: 0; }
+#heard { font-style: italic; color: var(--muted); font-size: 12.5px; margin-bottom: 4px; text-wrap: pretty; }
+#heard:empty { display: none; }
+/* every word is laid out from the start (the reveal only changes opacity), so the text never jumps or reflows */
+#text { text-wrap: pretty; overflow-wrap: break-word; hyphens: manual; min-height: 1.42em; }
+#text .w { opacity: 0; transition: opacity 70ms linear; }
+#text .w.on { opacity: 1; }
+#status { margin-top: 4px; font-size: 12px; line-height: 1.38; color: var(--muted); font-style: italic; text-wrap: pretty; }
+#status:empty { display: none; }
+
+/* the spoken parts keep their height; only the details/receipts/facts area shrinks and scrolls */
+header, #heard, #text, #status { flex: none; }
+#scroll { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; margin-top: 8px; padding: 8px 4px 0 0; border-top: 1px solid var(--rule); min-height: 56px; }
+#scroll:empty, #scroll.empty { display: none; }
+#scroll::-webkit-scrollbar { width: 6px; } #scroll::-webkit-scrollbar-button { display: none; height: 0; }
+#scroll::-webkit-scrollbar-track { background: transparent; } #scroll::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+
+#details { font-size: 12px; line-height: 1.4; margin-bottom: 8px; }
+#details h4 { margin: 6px 0 1px; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+#details h4:first-child { margin-top: 0; }
+#details p { text-wrap: pretty; }
+
+#receipts { list-style: none; margin: 0 0 8px; padding: 0; font-size: 12px; line-height: 1.38; }
+#receipts:empty { display: none; }
+#receipts li { position: relative; padding-left: 12px; margin-bottom: 4px; text-wrap: pretty; overflow-wrap: break-word; }
+#receipts li::before { content: ""; position: absolute; left: 2px; top: .55em; width: 4px; height: 4px; border-radius: 50%; background: var(--ink); }
+#receipts .src { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+
+#facts { display: grid; grid-template-columns: max-content 1fr; column-gap: 12px; row-gap: 2px; margin: 0; font-size: 11.5px; line-height: 1.38; font-variant-numeric: tabular-nums; }
+#facts:empty { display: none; }
+#facts dt { color: var(--muted); white-space: nowrap; }
+#facts dd { margin: 0; text-wrap: pretty; overflow-wrap: anywhere; }
+#facts dd.bad, #facts dd.dumping { color: var(--bad); font-weight: 600; }
+#facts dd.pumping { color: var(--good); font-weight: 600; }
+
+/* the buddy */
+#buddy { position: absolute; left: 12px; bottom: 36px; width: 225px; height: 250px; cursor: grab; touch-action: none; }
+#buddy.dragging { cursor: grabbing; }
+#char { width: 100%; height: 100%; pointer-events: none; display: flex; align-items: flex-end; justify-content: center; }
+#rec {
+  position: absolute; left: 50%; top: -6px; transform: translateX(-50%); padding: 1px 8px; font-size: 11px; line-height: 1.5;
+  background: var(--paper); border: 1px solid #000; border-radius: 8px; white-space: nowrap;
+}
+#rec .dot { display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: #d00; animation: rec 1s infinite; vertical-align: 0; }
+@keyframes rec { 50% { opacity: .2; } }
+
+/* which coin it's on: a little Win98 status chip under the buddy */
+#chip {
+  position: absolute; left: calc(12px + 112.5px); transform: translateX(-50%); bottom: 8px; max-width: 230px; display: flex; align-items: center; gap: 6px;
+  padding: 2px 8px 2px 3px; font-size: 11px; line-height: 16px; background: #c0c0c0; font-variant-numeric: tabular-nums;
+  border: 1px solid; border-color: #fff #404040 #404040 #fff; box-shadow: inset -1px -1px #808080, inset 1px 1px #dfdfdf; white-space: nowrap; overflow: hidden;
+}
+#chip img { width: 16px; height: 16px; border-radius: 3px; object-fit: cover; }
+#chip img[src=""] { display: none; }
+#chip-text { overflow: hidden; text-overflow: ellipsis; }
+
+/* ---- the card at a glance (2026-11-05): stamps, the read and its source, findings with icons, what would change it,
+   the numbers. Same paper and ink as the balloon; colour only carries meaning (red bad, amber watch out, green good). */
+:root { --ink-2: #4d4936; --tint-bad: #fff2ea; --edge-bad: #ebc3b6; --tint-warn: #fff8e2; --edge-warn: #e4d29c; --tint-good: #f4fae6; --edge-good: #c6daa9; }
+/* the stamps are slim rows: the label, the word, then its reason with the room to say it */
+#tiles { display: grid; gap: 4px; margin: 0 0 10px; }
+#tiles:empty { display: none; }
+.tile { display: grid; grid-template-columns: 54px max-content minmax(0, 1fr); align-items: baseline; column-gap: 8px; min-width: 0; padding: 5px 8px; border: 1px solid var(--rule); border-radius: 6px; background: var(--tile); }
+.tile.bad { background: var(--tint-bad); border-color: var(--edge-bad); }
+.tile.warn { background: var(--tint-warn); border-color: var(--edge-warn); }
+.tile.good { background: var(--tint-good); border-color: var(--edge-good); }
+.tile .k, #change .k, .num .k, #read .k { font-size: 9.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); line-height: 1.3; }
+.tile .tw { display: flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 700; line-height: 1.3; white-space: nowrap; }
+.tile .tw::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--dot); }
+.tile.bad .tw { color: var(--bad); } .tile.bad .tw::before { background: var(--bad); }
+.tile.warn .tw { color: var(--meh); } .tile.warn .tw::before { background: var(--meh); }
+.tile.good .tw { color: var(--good); } .tile.good .tw::before { background: var(--good); }
+.tile .tt { font-size: 11px; line-height: 1.3; color: var(--ink-2); overflow-wrap: anywhere; text-wrap: pretty; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+#read { margin: 0 0 10px; }
+#read .k { margin-bottom: 2px; }
+#read .rt { font-size: 12.5px; line-height: 1.42; text-wrap: pretty; overflow-wrap: break-word; }
+.srcbox { margin-top: 7px; padding: 1px 0 1px 8px; border-left: 2px solid var(--line); }
+.srcbox .sk { font-size: 11px; line-height: 1.35; color: var(--muted); overflow-wrap: anywhere; }
+.srcbox .q { margin-top: 2px; font-size: 12px; font-style: italic; line-height: 1.38; overflow-wrap: break-word; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.srcbox .lk { margin-top: 3px; font-size: 11px; line-height: 1.35; color: var(--ink-2); }
+
+#findings { list-style: none; margin: 0 0 10px; padding: 0; }
+#findings:empty { display: none; }
+#findings li { display: grid; grid-template-columns: 15px minmax(0, 1fr); column-gap: 7px; margin-bottom: 7px; }
+#findings li:last-child { margin-bottom: 0; }
+.ic { width: 15px; height: 15px; margin-top: 1px; border-radius: 50%; color: var(--ic-fg); font: 700 9px/15px var(--font); text-align: center; }
+.ic.bad { background: var(--bad); } .ic.warn { background: var(--meh); } .ic.good { background: var(--good); } .ic.info { background: var(--dot); }
+.ft { font-size: 12px; font-weight: 600; line-height: 1.3; text-wrap: pretty; overflow-wrap: break-word; }
+.fd { margin-top: 1px; font-size: 11.5px; line-height: 1.35; color: var(--ink-2); text-wrap: pretty; overflow-wrap: anywhere; }
+
+#change { margin: 0 0 10px; font-size: 11.5px; line-height: 1.38; color: var(--ink); text-wrap: pretty; }
+#change:empty { display: none; }
+#change .k { display: block; margin-bottom: 1px; }
+
+#numbers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px 8px; padding-top: 8px; border-top: 1px solid var(--rule); }
+#numbers:empty { display: none; }
+.num { min-width: 0; }
+.num .v { font-size: 12.5px; font-weight: 600; line-height: 1.3; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.num.wide { grid-column: 1 / -1; } .num.wide .v { white-space: normal; font-weight: 500; font-size: 12px; }
+.num.pumping .v { color: var(--good); } .num.dumping .v { color: var(--bad); }
+
+
+/* ================================================================ balloon looks (2026-11-05)
+   Each look only swaps colours, corners, shadow, tail and type; the layout is the same everywhere. Colour still only
+   carries meaning (red bad, amber watch out, green good), tuned per look so it reads on that background. */
+@font-face { font-family: "Parkinsans"; font-weight: 600; font-display: swap; src: url("fonts/parkinsans-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Parkinsans"; font-weight: 700; font-display: swap; src: url("fonts/parkinsans-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "Wix Madefor Text"; font-weight: 400; font-display: swap; src: url("fonts/wix-madefor-text-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Wix Madefor Text"; font-weight: 500; font-display: swap; src: url("fonts/wix-madefor-text-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Wix Madefor Text"; font-weight: 600; font-display: swap; src: url("fonts/wix-madefor-text-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Wix Madefor Text"; font-weight: 700; font-display: swap; src: url("fonts/wix-madefor-text-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "DM Mono"; font-weight: 400; font-display: swap; src: url("fonts/dm-mono-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "DM Mono"; font-weight: 500; font-display: swap; src: url("fonts/dm-mono-latin-500-normal.woff2") format("woff2"); }
+
+/* every look but Classic: a plain round close button and a soft coin chip instead of the Windows 98 bevels */
+body:not([data-look="classic"]) #close { width: 20px; height: 20px; border: 0; border-radius: 50%; box-shadow: none; background: var(--close-bg, rgba(0,0,0,.06)); color: var(--close-fg, var(--muted)); font: 600 10px/20px var(--font); }
+body:not([data-look="classic"]) #chip { background: var(--paper); color: var(--ink); border: 1px solid var(--rule); border-radius: 999px; box-shadow: 0 4px 12px -6px rgba(0,0,0,.35); padding: 2px 10px 2px 3px; }
+body:not([data-look="classic"]) #chip img { border-radius: 50%; }
+body:not([data-look="classic"]) #rec { border-color: var(--rule); border-radius: 999px; }
+
+/* pillbud: the pillbud.fun look. White card on cream, soft shadow, round corners, the site's two fonts */
+body[data-look="brand"] {
+  --paper: #ffffff; --ink: #0b1410; --ink-2: #46524c; --muted: #7e8781; --line: #e6ded0; --rule: #ece5d8;
+  --good: #1f7a4d; --meh: #9a6b00; --bad: #c0392b; --dot: #b8b1a3;
+  --font: "Wix Madefor Text", "Segoe UI", sans-serif; --font-title: "Parkinsans", "Segoe UI", sans-serif;
+  --edge: #ece5d8; --radius: 20px; --pad: 14px 16px 14px; --shadow: none; --drop: drop-shadow(0 14px 22px rgba(11, 20, 16, .16)) drop-shadow(0 2px 3px rgba(11, 20, 16, .06));
+  --tile: #fbf8f2; --tint-bad: #fcefeb; --edge-bad: #f1d3cb; --tint-warn: #fbf5e4; --edge-warn: #ece0bb; --tint-good: #eef8f1; --edge-good: #cfe7d8;
+  --close-bg: #f6efe2;
+}
+body[data-look="brand"] #title { font-size: 15px; letter-spacing: -.01em; }
+
+/* Dark: for dark trading screens. Ink background, light text, pillbud's pump mint as the good colour */
+body[data-look="dark"] {
+  --paper: #0f1613; --ink: #eaf2ee; --ink-2: #b6c4bd; --muted: #7f8e86; --line: #33453d; --rule: #22302a; --title: #ffffff;
+  --good: #84f9bf; --meh: #f2c14e; --bad: #ff6b5e; --dot: #55655d; --ic-fg: #0b1410;
+  --edge: #26362f; --radius: 14px; --shadow: none; --drop: drop-shadow(0 16px 26px rgba(0, 0, 0, .45));
+  --tile: #151e1a; --tint-bad: rgba(255, 107, 94, .10); --edge-bad: rgba(255, 107, 94, .35); --tint-warn: rgba(242, 193, 78, .10); --edge-warn: rgba(242, 193, 78, .32); --tint-good: rgba(132, 249, 191, .08); --edge-good: rgba(132, 249, 191, .30);
+  --close-bg: #1c2823; --close-fg: #9fb0a8;
+}
+
+/* Clean white: a modern app notification. White, light grey lines, crisp */
+body[data-look="white"] {
+  --paper: #ffffff; --ink: #111827; --ink-2: #4b5563; --muted: #6b7280; --line: #d1d5db; --rule: #eef0f3;
+  --good: #15803d; --meh: #b45309; --bad: #dc2626; --dot: #c3c8cf;
+  --edge: rgba(17, 24, 39, .10); --radius: 16px; --pad: 13px 15px 13px; --shadow: none; --drop: drop-shadow(0 10px 18px rgba(17, 24, 39, .18)) drop-shadow(0 1px 2px rgba(17, 24, 39, .08));
+  --tile: #f9fafb; --tint-bad: #fef2f2; --edge-bad: #fecaca; --tint-warn: #fffbeb; --edge-warn: #fde68a; --tint-good: #f0fdf4; --edge-good: #bbf7d0;
+  --close-bg: #f3f4f6;
+}
+
+/* Mint: pillbud's own colour up front. Pale mint paper, a mint edge, the brand's title font */
+body[data-look="mint"] {
+  --paper: #effcf5; --ink: #0b1410; --ink-2: #3f5048; --muted: #5f7369; --line: #b9ead2; --rule: #cdeedd;
+  --good: #137a47; --meh: #8f6400; --bad: #b8322a; --dot: #9fcbb5;
+  --font-title: "Parkinsans", "Segoe UI", sans-serif;
+  --edge: #9cf3cc; --edge-w: 2px; --radius: 18px; --shadow: none; --drop: drop-shadow(0 10px 18px rgba(11, 60, 40, .16));
+  --tile: #ffffff; --tint-bad: #fff1ee; --edge-bad: #f3cfc8; --tint-warn: #fff8e6; --edge-warn: #eedcaa; --tint-good: #e3faee; --edge-good: #a9e9c8;
+  --close-bg: #d9f7e8; --close-fg: #2f5c46;
+}
+body[data-look="mint"] #balloon::before { left: 21px; bottom: -21px; border-width: 21px 23px 0 0; }
+body[data-look="mint"] #balloon::after { left: 23px; bottom: -17px; border-width: 18px 19.5px 0 0; }
+
+/* Toy: a vinyl-toy speech bubble. Thick ink outline, very round, a hard offset shadow like a printed sticker */
+body[data-look="toy"] {
+  --paper: #fffdf7; --ink: #0b1410; --ink-2: #3c463f; --muted: #66706a; --line: #0b1410; --rule: #e7e1d3;
+  --good: #137a47; --meh: #946300; --bad: #c0392b; --dot: #b9b2a2;
+  --font: "Wix Madefor Text", "Segoe UI", sans-serif; --font-title: "Parkinsans", "Segoe UI", sans-serif;
+  --edge: #0b1410; --edge-w: 2.5px; --radius: 22px; --pad: 14px 16px 14px; --shadow: none; --drop: drop-shadow(4px 5px 0 #0b1410);
+  --tile: #f7f3ea; --tint-bad: #fdece7; --edge-bad: #0b1410; --tint-warn: #fdf4dc; --edge-warn: #0b1410; --tint-good: #e6f8ee; --edge-good: #0b1410;
+  --close-bg: #0b1410; --close-fg: #fffdf7;
+}
+body[data-look="toy"] .tile { border-width: 1.5px; border-radius: 10px; }
+body[data-look="toy"] #title { font-size: 15px; font-weight: 700; }
+body[data-look="toy"] #balloon::before { left: 20px; bottom: -24px; border-width: 24px 26px 0 0; }
+body[data-look="toy"] #balloon::after { left: 23.5px; bottom: -18px; border-width: 19.5px 21px 0 0; }
+
+/* Game: a retro RPG dialog box (pillbud talks in game beeps). Black box, white double frame, mono type */
+body[data-look="game"] {
+  --paper: #000000; --ink: #ffffff; --ink-2: #c9c9c9; --muted: #9a9a9a; --line: #5a5a5a; --rule: #3a3a3a; --title: #ffffff;
+  --good: #7dfc8a; --meh: #ffd34d; --bad: #ff5c5c; --dot: #6a6a6a; --ic-fg: #000;
+  --font: "DM Mono", Consolas, monospace; --font-title: "DM Mono", Consolas, monospace;
+  --edge: #ffffff; --edge-w: 3px; --radius: 2px; --pad: 13px 15px 13px; --shadow: 0 0 0 3px #000; --drop: none;
+  --tile: #0d0d0d; --tint-bad: rgba(255, 92, 92, .10); --edge-bad: rgba(255, 92, 92, .55); --tint-warn: rgba(255, 211, 77, .10); --edge-warn: rgba(255, 211, 77, .5); --tint-good: rgba(125, 252, 138, .08); --edge-good: rgba(125, 252, 138, .5);
+  --close-bg: #000; --close-fg: #fff;
+}
+body[data-look="game"] #balloon { font-size: 12.5px; letter-spacing: -.01em; }
+body[data-look="game"] .tile { border-radius: 0; }
+body[data-look="game"] #close { border-radius: 0; border: 1.5px solid #fff; }
+body[data-look="game"] #balloon::before { left: 20px; bottom: -25px; border-width: 25px 25px 0 0; }
+body[data-look="game"] #balloon::after { left: 24px; bottom: -17.5px; border-width: 18px 18px 0 0; }
+
+/* Sticker: a die-cut sticker. White with a thick white margin and a soft drop shadow that includes the tail */
+body[data-look="sticker"] {
+  --paper: #ffffff; --ink: #14161a; --ink-2: #484d55; --muted: #757b84; --line: #dfe2e6; --rule: #eceef1;
+  --good: #128a4a; --meh: #b06a00; --bad: #d23b2e; --dot: #c8ccd2;
+  --font-title: "Parkinsans", "Segoe UI", sans-serif;
+  --edge: #ffffff; --edge-w: 6px; --radius: 24px; --pad: 10px 12px 10px; --shadow: none; --drop: drop-shadow(0 8px 14px rgba(0, 0, 0, .28)) drop-shadow(0 1px 1px rgba(0, 0, 0, .12));
+  --tile: #f6f7f9; --tint-bad: #fff1ef; --edge-bad: #f5cdc7; --tint-warn: #fff7e6; --edge-warn: #f3dfb0; --tint-good: #edf9f2; --edge-good: #c3e9d2;
+  --close-bg: #f1f3f5;
+}
+body[data-look="sticker"] #title { font-size: 15px; }
+body[data-look="sticker"] #balloon::before { left: 19px; bottom: -26px; border-width: 26px 27px 0 0; }
+body[data-look="sticker"] #balloon::after { left: 19px; bottom: -26px; border-width: 26px 27px 0 0; }

@@ -1,0 +1,44 @@
+{
+  "name": "pillbud",
+  "version": "0.1.0",
+  "private": true,
+  "description": "pillbud: a desktop buddy that reads Solana memecoin charts, researches the coin you're on and talks about it.",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "start:hidden": "electron . --test",
+    "research": "node src/cli-research.js",
+    "test:detect": "node test/detect.test.js",
+    "test:voice": "node test/voice-loop.test.js",
+    "test:watch": "node test/watch.test.js 5",
+    "test:devsell": "node test/devsell.test.js",
+    "test:extension": "node test/extension.test.js",
+    "icons": "node tools/make-icons.js",
+    "test:tts-ab": "node test/tts-ab.test.js",
+    "test:legit": "electron test/legit.test.js",
+    "test:session": "bash test/session.sh p100",
+    "test:alerts": "node test/alerts.test.js 4",
+    "test:push-latency": "node test/push-latency.test.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.4.0",
+    "@solana/web3.js": "^1.98.4",
+    "bs58": "^6.0.0",
+    "ws": "^8.22.1"
+  },
+  "devDependencies": {
+    "electron": "^45.2.1"
+  },
+  "optionalDependencies": {
+    "uiohook-napi": "^1.5.5"
+  },
+  "license": "MIT",
+  "homepage": "https://pillbud.vercel.app",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pillbud/pillbud.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pillbud/pillbud/issues"
+  }
+}

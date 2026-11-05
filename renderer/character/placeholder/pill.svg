@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 190" class="pill" aria-label="pillbud">
+  <!-- Placeholder pillbud. Each part has an id the state CSS (character.css) shows, hides or animates.
+       The real character from brand/ replaces this file through renderer/character/manifest.json. -->
+  <ellipse class="shadow" cx="80" cy="180" rx="36" ry="6"/>
+  <g class="body">
+    <g class="arm arm-l"><path d="M44 108 Q24 112 18 126" /><circle cx="18" cy="127" r="6"/></g>
+    <g class="arm arm-r"><path d="M116 108 Q136 112 142 126" /><circle cx="142" cy="127" r="6"/></g>
+    <path class="top" d="M40 94 V54 A40 40 0 0 1 120 54 V94 Z"/>
+    <path class="bottom" d="M40 94 V128 A40 40 0 0 0 120 128 V94 Z"/>
+    <rect class="outline" x="40" y="14" width="80" height="154" rx="40"/>
+    <line class="seam" x1="40" y1="94" x2="120" y2="94"/>
+    <rect class="shine" x="52" y="26" width="10" height="30" rx="5"/>
+    <g class="face">
+      <circle class="cheek" cx="54" cy="80" r="6"/><circle class="cheek" cx="106" cy="80" r="6"/>
+      <g class="eyes">
+        <ellipse class="eye" cx="64" cy="58" rx="11" ry="13"/><ellipse class="eye" cx="96" cy="58" rx="11" ry="13"/>
+        <g class="pupils"><circle cx="65" cy="60" r="5.5"/><circle cx="97" cy="60" r="5.5"/><circle class="glint" cx="67" cy="57" r="1.8"/><circle class="glint" cx="99" cy="57" r="1.8"/></g>
+        <g class="lids"><rect x="51" y="43" width="26" height="30" rx="12"/><rect x="83" y="43" width="26" height="30" rx="12"/></g>
+      </g>
+      <g class="xeyes"><path d="M56 50 L72 66 M72 50 L56 66 M88 50 L104 66 M104 50 L88 66"/></g>
+      <g class="sleepeyes"><path d="M54 60 Q64 66 74 60 M86 60 Q96 66 106 60"/></g>
+      <path class="m m-smile" d="M70 78 Q80 87 90 78"/>
+      <g class="m m-talk"><ellipse cx="80" cy="81" rx="9" ry="7"/></g>
+      <path class="m m-grin" d="M66 76 Q80 96 94 76 Z"/>
+      <ellipse class="m m-o" cx="80" cy="82" rx="5" ry="6"/>
+      <path class="m m-flat" d="M70 84 Q80 78 90 84"/>
+    </g>
+  </g>
+  <g class="fx fx-dots"><circle cx="128" cy="22" r="4"/><circle cx="140" cy="14" r="5"/><circle cx="153" cy="6" r="6"/></g>
+  <g class="fx fx-sweat"><path d="M124 34 Q130 44 124 48 Q118 44 124 34 Z"/></g>
+  <g class="fx fx-tear"><path d="M58 72 Q62 80 58 84 Q54 80 58 72 Z"/></g>
+  <g class="fx fx-sparkles"><path d="M18 30 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3z"/><path d="M140 40 l2 6 6 2 -6 2 -2 6 -2 -6 -6 -2 6 -2z"/><path d="M146 92 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2z"/><path d="M10 84 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2z"/></g>
+  <g class="fx fx-zzz"><text x="118" y="34">z</text><text x="130" y="20">z</text><text x="144" y="8">Z</text></g>
+</svg>

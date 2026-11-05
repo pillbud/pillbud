@@ -1,0 +1,8 @@
+{
+  "name": "placeholder pill",
+  "kind": "svg-inline",
+  "svg": "placeholder/pill.svg",
+  "css": "placeholder/character.css",
+  "states": ["idle", "talk", "think", "point", "celebrate", "panic", "rugged", "wave", "sleep"],
+  "size": [150, 178]
+}
