@@ -10,14 +10,18 @@ pillbud is read-only. It never connects to a wallet, never signs anything and ne
 
 | Check | What you get | Time |
 |---|---|---|
-| **The read** | What the coin is, where it came from (the tweet, video or article behind it), why people care now, and whether it's real, a LARP or a copycat | 3 to 4 s |
-| **Holder stamp** | Fair, too early, sketchy or rigged: launch buyers still holding, the dev's share, linked wallets, and how far the price would drop if they sold | about 1 s |
+| **The read** | What the coin is, where it came from (the tweet, video or article behind it), why people care now, and whether it's real, a LARP, a copycat or just a meme | 3 to 4 s |
+| **Holder stamp** | Fair, too early, sketchy, rigged or dumped: launch buyers still holding, the dev's share, linked wallets, and how far the price would drop if they sold. Exchange wallets are named and never counted as a whale | about 1 s |
 | **Linked wallets** | Top holders that are one person: a shared first funder, tokens passed between them, or SOL moved through a quiet wallet. Busy wallets (exchanges, relayers) never count as a link | about 5 s |
 | **Product test** | For a coin that says it has an app: pillbud opens the site in a hidden, throwaway browser, tries it, and says whether it works, partly works, is simulated or isn't built | 11 to 19 s |
 | **Fee promises** | When a coin says its creator fees go to buybacks, burns, charity, holders or a treasury, pillbud reads pump.fun's fee setup and where the SOL actually went | about 1 s |
 | **Live alerts** | Dev sells, whale sells, pumps and dumps, pushed from the chain as they happen | under 1 s |
 
 **Copycats, judged on the story.** Coins share names, tickers and pictures all the time, and that alone isn't flagged. A coin is a copy when an earlier coin on the same story is worth at least twice as much, or when it copies a big coin that already ran.
+
+**Just a meme.** A coin with nothing behind it (no post, news, person or product) that isn't pretending to be anything is called just that. It's neither a green light nor a LARP.
+
+**Dumped.** On a coin under a week old, when the launch buyers and the dev already sold 10% or more into it and the price is 70% or more below its peak, the holder stamp says so instead of "too early".
 
 **Talk to it.** Hold `Ctrl + Alt` and ask a question about the coin. Text mode is the default; voice is optional.
 
@@ -78,7 +82,7 @@ Tab reading works without it. To add it anyway: open `chrome://extensions`, turn
 src/main.js            the app: finds the coin, runs the checks, alerts, the tray, the balloon
 src/read.js            the read (what the coin is, its source, real or copy)
 src/brain.js           the prompts for Claude
-src/research/          chain data, holders, linked wallets (trench.js), fees, the product test (probe.js), X, pump.fun
+src/research/          chain data, holders, linked wallets (trench.js), exchange labels (labels.js), fees, the product test (probe.js), X, pump.fun
 src/detect.js          finds a coin address in a URL, a window or the clipboard
 renderer/              the window: the character, the balloon, sounds
 extension/             the optional Chrome extension

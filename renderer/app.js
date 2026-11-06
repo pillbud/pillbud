@@ -80,8 +80,9 @@ function setCard(c) {
   // chip under the buddy: which coin it's on
   if (!c) { chip.classList.add("hidden"); return; }
   $("chip-img").src = c.image || "";
-  $("chip-text").textContent = `on $${clean(c.symbol) || "?"} · ${c.mint.slice(0, 4)}…${c.mint.slice(-4)}`;
-  chip.title = c.mint;
+  const cm = c.mint || "";
+  $("chip-text").textContent = `on $${clean(c.symbol) || "?"}${cm ? ` · ${cm.slice(0, 4)}…${cm.slice(-4)}` : ""}`;
+  chip.title = cm;
   chip.classList.remove("hidden");
   bud.mood(c.mood || 0);
 }

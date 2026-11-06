@@ -84,6 +84,8 @@ async function vision(imageUrl, client) {
     } catch { /* next */ }
   }
   if (!buf) return null;
+  const magic = buf.subarray(0, 12).toString("latin1");
+  type = magic.startsWith("\x89PNG") ? "image/png" : magic.startsWith("\xff\xd8\xff") ? "image/jpeg" : magic.startsWith("GIF8") ? "image/gif" : magic.startsWith("RIFF") && magic.slice(8, 12) === "WEBP" ? "image/webp" : type;
   const msg = await client.messages.create({
     model: "claude-haiku-5-5", max_tokens: 90, thinking: { type: "disabled" }, output_config: { effort: "low" },
     messages: [{ role: "user", content: [
@@ -159,7 +161,7 @@ async function gather(mint, { fetcher, quickP, client, log = () => {} }) {
   const facts = {
     coin: {
       name: base.name || null, ticker: base.symbol || null, description: base.description || null,
-      launched: rel(base.createdAt) || null, launchpad: pf ? "pump.fun" : m?.dex || null,
+      launched: rel(base.createdAt) || null, launchpad: pf && (pf.bondingCurve || /pump$/.test(mint)) ? "pump.fun" : m?.dex || null, // pump.fun also lists coins it didn't launch ($PENGU)
       image: img?.text || (base.image ? "not read in time" : "none"),
       links: links.length ? links : "none", livestream: pf?.live ? `live now${pf.liveViewers ? ` (${pf.liveViewers} watching)` : ""}` : undefined,
     },

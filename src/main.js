@@ -193,7 +193,7 @@ const cap = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
 function coinCard(f, q) {
   const m = f?.market || q?.market, L = f?.legit, st = f?.state || q?.state, S0 = f?.holderStamp, P = f?.probe;
   const mint = f?.mint || q?.mint;
-  const people = (f?.holders || []).filter((h) => h.wallet);
+  const people = (f?.holders || []).filter((h) => h.wallet && !h.active);
   const top10 = people.slice(0, 10).reduce((s, h) => s + (h.pct || 0), 0);
   const verdict = L?.verdict || state.readVerdict || null;
 
@@ -201,11 +201,11 @@ function coinCard(f, q) {
   const storyWord = !verdict ? null : /^copycat/.test(verdict) ? "Copycat" : cap(verdict);
   const tiles = [{
     label: "Story", word: storyWord || "Reading...",
-    level: !verdict ? "info" : /legit/.test(verdict) ? "good" : /unverified/.test(verdict) ? "warn" : "bad",
+    level: !verdict ? "info" : /legit/.test(verdict) ? "good" : /unverified/.test(verdict) ? "warn" : /just a meme/.test(verdict) ? "info" : "bad",
     tag: L ? L.tag || null : verdict ? (can("legit") ? "full check running" : "first read only") : null,
   }];
   if (S0 && S0.word !== "unknown") tiles.push({
-    label: "Holders", word: cap(S0.word), level: { rigged: "bad", sketchy: "warn", "too early": "info", fair: "good" }[S0.word] || "info",
+    label: "Holders", word: cap(S0.word), level: { rigged: "bad", dumped: "bad", sketchy: "warn", "too early": "info", fair: "good" }[S0.word] || "info",
     tag: `${S0.tag}${S0.notChecked?.includes("linked wallets") && !/rigged|sketchy/.test(S0.word) ? ", still checking" : ""}`, score: S0.score,
   });
   else if (f || q) tiles.push({ label: "Holders", word: "Reading...", level: "info", tag: null });
@@ -313,7 +313,7 @@ async function onCoin(address, source, url) {
     // where the creator fees go: pump.fun's fee setup and the money (about a second, chain only, every tier)
     if (!f.feesP && (f.pump || mint.endsWith("pump"))) {
       const t0 = Date.now();
-      f.feesP = feesMod.feeCheck({ mint, curveCreator: f.pump?.creator, pf: f.pumpApi || {}, devWallets: [...devWallets, f.pumpApi?.creator], supply: f.mintInfo.supply, launchedAt: f.createdAt })
+      f.feesP = feesMod.feeCheck({ mint, curveCreator: f.pump?.creator || f.pumpApi?.creator, pf: f.pumpApi || {}, devWallets: [...devWallets, f.pumpApi?.creator], supply: f.mintInfo.supply, launchedAt: f.createdAt })
         .catch((e) => ({ unknown: e.message }))
         .then((F) => { f.feeSetup = F; log(`fees in ${Date.now() - t0} ms: ${F.unknown ? `unknown (${F.unknown})` : F.mode}`); return F; });
     }
@@ -337,6 +337,8 @@ async function onCoin(address, source, url) {
     // the product test runs alongside the full check: a coin that claims an app gets its app tried
     const probeP = maybeProbe(f, mint, c);
     if (!f.legit) {
+      // what the read found goes into the full check: a source post it saw live beats a web search that can't find it
+      f.readSays = state.read && state.read.mint === mint ? { verdict: state.read.verdict, path: state.read.path, type: state.read.type } : null;
       await addLegit(f, { fetcher, log: (s) => log(`  ${s}`) });
       c.legit = { at: Date.now(), v: { legit: f.legit, facts: f.facts.legit } };
     }
@@ -358,7 +360,7 @@ async function onCoin(address, source, url) {
 }
 
 // ------------------------------------------------------------------ the read (src/read.js gathers, brain.readStream interprets)
-const BADGE = { real: "looks legit", larp: "likely LARP", copycat: "copycat", unclear: "unverified" };
+const BADGE = { real: "looks legit", larp: "likely LARP", copycat: "copycat", unclear: "unverified", meme: "just a meme" };
 const cardNow = () => (state.coin ? coinCard(state.coin) : coinCard(null, state.quick));
 async function theRead(mint, { quickP, tDetect, cache: c }) {
   const tn = S().tone;
@@ -380,7 +382,7 @@ async function theRead(mint, { quickP, tDetect, cache: c }) {
   const want = S().readModel && S().readModel !== "auto" ? S().readModel : can("legit") ? "claude-sonnet-5-5" : "claude-haiku-5-5";
   const opts = (model) => ({
     search, model, toneName: tn,
-    onTag: (t) => { mood0 = t === "real" ? "celebrate" : t === "unclear" ? "point" : "think"; sfx0 = t === "larp" || t === "copycat" ? "larp" : t === "real" ? "legit" : null; state.readVerdict = BADGE[t]; },
+    onTag: (t) => { mood0 = t === "real" ? "celebrate" : t === "unclear" || t === "meme" ? "point" : "think"; sfx0 = t === "larp" || t === "copycat" ? "larp" : t === "real" ? "legit" : null; state.readVerdict = BADGE[t]; },
     onSentence: (s) => {
       if (state.mint !== mint) return;
       if (firstAt == null) { firstAt = Date.now(); metric({ what: "read first words", ms: firstAt - tDetect, type: g.type, path: g.path, coreMs: g.times.core }); }
@@ -494,10 +496,13 @@ function applyProbe(f) {
   const L = f.legit, P = f.probe;
   if (!L || !P || P.error) return;
   const add = (text, weight) => { L.receipts = [{ text, source: `product test: ${P.url}`, weight, level: "info", title: text }, ...L.receipts].slice(0, 3); };
-  if (P.verdict === "simulated") { L.verdict = "likely LARP"; L.tag = "its product is simulated"; L.wouldChange = P.wouldChange; add(`its product is simulated: ${P.line}`, 10); }
-  else if (P.verdict === "not built" && /legit/.test(L.verdict)) { L.verdict = "unverified"; L.tag = "its product isn't built"; L.wouldChange = P.wouldChange; add(`its product isn't built yet: ${P.line}`, 9); }
-  else if (P.verdict === "partly works" && /legit/.test(L.verdict)) { L.verdict = "unverified"; L.tag = "its product only partly works"; L.wouldChange = P.wouldChange; add(`I tried the product and it only partly works: ${P.line}`, 8); }
+  // a faked product is a LARP only when the product is the pitch; a meme's satire site isn't a product (2026-11-06: $HEAVYBAGS)
+  if (P.verdict === "simulated" && probeMod.claimsProduct(f, state.read)) { L.verdict = "likely LARP"; L.tag = "its product is simulated"; L.wouldChange = P.wouldChange; add(`its product is simulated: ${P.line}`, 10); }
+  else if (P.verdict === "simulated") add(`its site shows made-up activity: ${P.line}`, 7);
+  else if (P.verdict === "not built" && /legit/.test(L.verdict) && probeMod.claimsProduct(f, state.read)) { L.verdict = "unverified"; L.tag = "its product isn't built"; L.wouldChange = P.wouldChange; add(`its product isn't built yet: ${P.line}`, 9); }
+  else if (P.verdict === "partly works" && /legit/.test(L.verdict) && probeMod.claimsProduct(f, state.read)) { L.verdict = "unverified"; L.tag = "its product only partly works"; L.wouldChange = P.wouldChange; add(`I tried the product and it only partly works: ${P.line}`, 8); }
   else if (P.verdict === "works" || P.verdict === "partly works") add(`I tried the product: ${P.line}`, 7);
+  else if (P.verdict === "not built") add(`its site is a landing page, not a product: ${P.line}`, 5);
   if (P.secretKey) add(`its site leaks a secret API key in its own code (${P.secretKey})`, 8);
   f.facts.legit = { ...(f.facts.legit || {}), verdict: L.verdict, wouldChangeIt: L.wouldChange };
 }

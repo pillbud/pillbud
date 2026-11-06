@@ -91,7 +91,9 @@ function scanCode(code, src) {
   let randomTimers = 0;
   const iv = /setInterval\(/g;
   while ((m = iv.exec(code)) && randomTimers < 50) { const w = code.slice(m.index, m.index + 500); if (/Math\.random\(\)/.test(w)) { if (randomTimers < 2) add("random on a timer", m.index, 40); randomTimers++; } }
-  const secret = /\b(sk-(?:ant-|proj-)?[A-Za-z0-9_-]{24,}|AIza[0-9A-Za-z_-]{35}|xai-[A-Za-z0-9]{40,})\b/.exec(code);
+  // AIza... Google keys aren't here: they're browser keys, public by design and locked to the site (2026-11-05: $WYTH
+  // was marked down for one)
+  const secret = /\b(sk-(?:ant-|proj-)?[A-Za-z0-9_-]{24,}|xai-[A-Za-z0-9]{40,})\b/.exec(code);
   const ai = KIND[2][1].exec(code);
   return { hits, randomTimers, randoms: (code.match(/Math\.random\(\)/g) || []).length, secret: secret ? `${secret[0].slice(0, 5)}... (${secret[0].length} characters, in ${src})` : null, aiHost: ai ? ai[0] : null };
 }
@@ -219,7 +221,8 @@ async function productTest(url, { client, claim = {}, log = () => {}, model = "c
   const c = costs.log({ kind: "probe", model, input: msg.usage.input_tokens, output: msg.usage.output_tokens, ms: Date.now() - t1, browseMs: ev.ms, url });
   log(`probe: ${j.verdict} in ${Date.now() - t0} ms (browse ${ev.ms} ms, judge ${Date.now() - t1} ms, $${c.usd})`);
   return {
-    url, verdict: j.verdict, tag: j.tag, line: j.line, findings: j.findings.slice(0, 5), wouldChange: j.wouldChange,
+    url, verdict: j.verdict, tag: j.tag, line: j.line, wouldChange: j.wouldChange,
+    findings: j.findings.slice(0, 5).map((x) => (x.status === "missing" && /\b(needs?|requires?|behind)\b.*\b(wallet|log ?in|sign[- ]?in|account|connect)/i.test(`${x.title} ${x.detail}`) ? { ...x, status: "info" } : x)),
     pressed: ev.cta?.text || null, network: { dataCalls: ev.network?.dataCalls ?? 0, byKind: ev.network?.byKind || {}, failed: ev.network?.failed ?? 0 },
     secretKey: ev.scripts?.secretKey || null, ms: Date.now() - t0, browseMs: ev.ms, usd: c.usd, shots: shots.map((s) => s.jpeg),
   };
@@ -240,4 +243,12 @@ function target(f, read) {
   return /^https?:/.test(site) ? site : `https://${site}`;
 }
 
-module.exports = { productTest, run, target, scanCode };
+/** the coin's pitch is a product (an app, an agent, a tool): only then can a half-built one cast doubt on the story.
+ *  A meme coin with a fan site isn't claiming a product ($TRUMP, $PNUT on 2026-11-05). */
+function claimsProduct(f, read) {
+  if (read?.type === "tech") return true;
+  const own = [f?.legit?.checks?.claims?.description, f?.legit?.checks?.claims?.name, f?.pumpApi?.description, f?.name, ...(read?.lines || []).slice(0, 2)].filter(Boolean).join(" ");
+  return PRODUCT_WORDS.test(own);
+}
+
+module.exports = { productTest, run, target, scanCode, claimsProduct };

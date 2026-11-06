@@ -79,7 +79,7 @@ async function copies(mint, c, fetcher, self) {
   const ticker = (c.ticker || "").toLowerCase(), name = (c.name || "").toLowerCase();
   let list = [], source;
   if (fetcher) {
-    const found = (await Promise.all([pumpfun.search(fetcher, c.ticker || c.name, 50), c.name && c.name !== c.ticker ? pumpfun.search(fetcher, c.name, 50) : []].map((p) => p.catch(() => [])))).flat();
+    const found = (await Promise.all([pumpfun.search(fetcher, c.ticker || c.name, 50), c.name && c.name !== c.ticker ? pumpfun.search(fetcher, c.name, 50) : Promise.resolve([])].map((p) => p.catch(() => [])))).flat();
     list = [...new Map(found.map((f) => [f.mint, f])).values()];
     source = "pump.fun search";
   } else {
@@ -167,10 +167,29 @@ function decide(ch) {
     const strong = /\bofficial\b|\bendorsed\b|backed by|launched by|\bceo\b|by the team of/.test(own) || officialLink || (/\b(coin|token)\b/.test(nameStr) && words.some((w) => nameStr.includes(w)));
     if (!strong) { aff = "parody"; ch.affiliationNote = "the model said implied; no official wording, name or link in the coin's own text, so treated as parody"; }
   }
+  // the "subject" is the coin itself ($BONK: "Bonk Solana memecoin"): it can't be posing as itself
+  const GENERIC = new Set(["solana", "sol", "memecoin", "meme", "coin", "token", "community", "official", "the", "on", "of", "project", "cto"]);
+  const wordsOf = (s) => String(s || "").toLowerCase().replace(/\(.*?\)/g, " ").split(/[^a-z0-9]+/).filter((w) => w.length >= 2 && !GENERIC.has(w));
+  const ownWords = new Set([...wordsOf(ch.claims?.name), ...wordsOf(ch.claims?.ticker)]), subjWords = wordsOf(n?.subject);
+  const subjectIsCoin = ok && /\b(coin|memecoin|token|solana)\b/i.test(String(n.subject || "")) && ["project", "meme", "unclear"].includes(n.subjectType) && subjWords.length > 0 && subjWords.every((w) => ownWords.has(w));
+  if (subjectIsCoin && (aff === "official" || aff === "implied")) { aff = "none"; ch.affiliationNote = "the subject is the coin itself"; }
   const claimsTie = aff === "official" || aff === "implied";
+  // X search ran (it needs an X key): only then can "that account never posted it" be a finding
+  const xSearched = !!(ch.xAck && !ch.xAck.unknown);
+  // a coin worth $50M+ for 60+ days isn't proven fake by a search that found nothing (2026-11-05: $TRUMP, the real one,
+  // was "likely LARP" because the web check found nothing and no X key was set)
+  const established = (ch.self?.mcUsd || 0) >= 50e6 && (base.ageMin || 0) >= 60 * 1440;
+  // the read opened the coin's own source (the post, the video) and found it live and real: a web search that can't
+  // find a two-hour-old post isn't evidence the story is fake (2026-11-05: $sssdfg, read "real", check "doesn't check out")
+  const readFound = base.read?.verdict === "real" && base.read.path === "source";
+  const readHasSource = base.read?.path === "source"; // the read opened a post, video or article behind it: there's a story
+  if (ok && n.narrative?.real === "no" && readFound) { n.narrative = { ...n.narrative, real: "unknown", note: "web search said no, but the read found its source live" }; }
   const xAck = ch.xAck && !ch.xAck.unknown && ch.xAck.posts > 0 ? ch.xAck : null; // the subject's own account posted it (X search)
   const acked = (ok && n.acknowledged?.status === "yes" && n.acknowledged.sources?.length) || xAck;
   const officialMatch = ok && n.officialHandle && xa?.account?.handle && n.officialHandle.toLowerCase() === xa.account.handle.toLowerCase();
+  // the "subject" is a small project and the coin links its own account: that's the team behind the coin, and a web
+  // search finding nothing about a tiny project isn't proof of a LARP (2026-11-05: $LAMPORT, "Not from Lamport Robotics")
+  const smallSubject = officialMatch && xa?.account?.followers != null && xa.account.followers < 10000;
   const copy = cp && !cp.unknown && cp.copyOf;
   if (ok && n.subject) n.subject = String(n.subject).replace(/\s*\([^)]*\)/g, "").trim(); // "Donald J. Trump (OFFICIAL TRUMP meme coin)" -> "Donald J. Trump"
   const size = (c) => (c.vol24h ? `${money(c.vol24h)} of 24h volume` : c.mcUsd ? `a ${money(c.mcUsd)} market cap` : "more activity");
@@ -178,10 +197,14 @@ function decide(ch) {
 
   let verdict;
   if (!ok) verdict = copy ? `copycat of ${copy.mint}` : "unverified";
-  else if (claimsTie) verdict = acked ? "looks legit" : n.acknowledged?.status === "no evidence" || officialMatch ? "likely LARP" : "unverified";
+  else if (claimsTie) verdict = acked ? "looks legit"
+    : !established && !smallSubject && (n.acknowledged?.status === "no evidence" || (officialMatch && xSearched && ch.xAck.posts === 0)) ? "likely LARP" : "unverified";
   else if (n.narrative?.real === "no") verdict = "likely LARP";
   else if (copy) verdict = `copycat of ${copy.mint}`;
   else if (n.narrative?.real === "unknown" && aff !== "none") verdict = "unverified";
+  // an original meme: no post, news, person or product behind it, and not posing as anything (2026-11-06). Neither a
+  // green light nor a LARP. A live source the read opened counts as a story.
+  else if (aff === "none" && n.narrative?.real !== "yes" && !readHasSource) verdict = "just a meme";
   else verdict = "looks legit";
 
   // receipts, strongest first
@@ -190,9 +213,11 @@ function decide(ch) {
     "good", `${H} acknowledged it`, xAck ? `it posted: "${(xAck.first?.text || "").slice(0, 80)}"` : n.acknowledged.detail);
   if (claimsTie && !acked && ch.xAck && !ch.xAck.unknown && ch.xAck.posts === 0) add(`@${n.officialHandle} never posted its address or ticker on X`, `X search (${ch.xAck.source})`, 9,
     "bad", `@${n.officialHandle} never posted it`, "no post with its address or ticker on X");
-  if (claimsTie && !acked && n.acknowledged?.status === "no evidence") add(`it presents itself as tied to ${n.subject}, but nothing from ${n.subject} mentions it`, "web search", 10,
+  if (claimsTie && !acked && n.acknowledged?.status === "no evidence" && !established && !smallSubject) add(`it presents itself as tied to ${n.subject}, but nothing from ${n.subject} mentions it`, "web search", 10,
     "bad", `Not from ${n.subject}`, `it presents itself as tied to ${n.subject}, but nothing from them mentions it`);
-  if (officialMatch && !acked) add(`its X link is just ${n.subject}'s real account @${n.officialHandle}, which anyone can paste; nothing shows that account posting the coin`, "fxtwitter + web search", 9,
+  if (officialMatch && !acked && !xSearched) add(`it links ${n.subject}'s real X account @${n.officialHandle}; whether that account posted the coin wasn't checked (no X search)`, "fxtwitter", 4,
+    "warn", `It links ${n.subject}'s real account`, "not checked yet whether that account posted it");
+  else if (officialMatch && !acked && !established) add(`its X link is just ${n.subject}'s real account @${n.officialHandle}, which anyone can paste; nothing shows that account posting the coin`, "fxtwitter + web search", 9,
     "bad", "Its X link is borrowed", `it links ${n.subject}'s real account, which anyone can paste`);
   if (ok && n.narrative?.real === "no") add(`the story it rides doesn't check out: ${n.narrative.summary}`, "web search", 9,
     "bad", "The story doesn't check out", n.narrative.summary);
@@ -205,7 +230,12 @@ function decide(ch) {
   if (ok && n.narrative?.real === "yes" && !claimsTie) add(`it's a meme riffing on something real, not posing as it: ${n.narrative.summary}`, `web search: ${n.narrative.sources[0] || "?"}`, 6,
     "good", "Something real behind the meme", n.narrative.summary);
   const dev = base.dev;
-  if (dev && !dev.unknown && dev.sentOutPct >= 5) add(`the dev wallet sent ${dev.sentOutPct}% of supply to other wallets without selling it`, "Helius", dev.sentOutPct >= 50 ? 9 : dev.sentOutPct >= 20 ? 7 : 5,
+  // a coin launched outside pump.fun: its creator minted the whole supply, so handing it out (the pool, airdrops) is how
+  // it launched, not a red flag (2026-11-05: $BONK, $WIF and $POPCAT were marked down for it)
+  const ownSupply = (base.launchpad && base.launchpad !== "pump.fun") || (!base.pump && !/pump$/.test(base.mint || ""));
+  if (dev && !dev.unknown && dev.sentOutPct >= 5 && ownSupply) add(`its creator minted the supply and handed out ${dev.sentOutPct}% of it (the pool, airdrops or other wallets), which is how coins outside pump.fun launch`, "Helius", 2,
+    "info", `The creator handed out ${dev.sentOutPct}% of the supply`, "it minted the whole supply, so that's how the pool and any airdrop were filled");
+  else if (dev && !dev.unknown && dev.sentOutPct >= 5) add(`the dev wallet sent ${dev.sentOutPct}% of supply to other wallets without selling it`, "Helius", dev.sentOutPct >= 50 ? 9 : dev.sentOutPct >= 20 ? 7 : 5,
     dev.sentOutPct >= 20 ? "bad" : "warn", `The dev sent out ${dev.sentOutPct}%`, "to other wallets, without selling it");
   if (base.fresh && base.fresh.fresh >= 5) add(`${base.fresh.fresh} of the top ${base.fresh.checked} wallets are brand new (first transaction under 3 days ago)`, "Helius", 7,
     "warn", `${base.fresh.fresh} of the top ${base.fresh.checked} wallets are new`, "their first transaction was under 3 days ago");
@@ -253,13 +283,15 @@ function decide(ch) {
   // an "unverified" says why: the story isn't confirmed yet, or the subject hasn't confirmed the tie
   if (verdict === "unverified" && ok && !claimsTie && n.narrative?.real === "unknown") add(`its story isn't confirmed yet${n.narrative.summary ? `: ${n.narrative.summary}` : ""}`, "web search", 9.5,
     "warn", "Its story isn't confirmed yet", n.narrative.summary || null);
-  if (verdict === "unverified" && claimsTie && !acked && n.acknowledged?.status !== "no evidence") add(`nothing yet confirms it's tied to ${n.subject}`, "web search", 9.5,
+  if (verdict === "unverified" && claimsTie && !acked && (n.acknowledged?.status !== "no evidence" || established || smallSubject)) add(`nothing yet confirms it's tied to ${n.subject}`, "web search", 9.5,
     "warn", `Not confirmed by ${n.subject}`, "nothing from them mentions it yet, and nothing shows it's fake either");
+  if (verdict === "just a meme") add("there's no story behind it: no post, news, person or product, and it isn't posing as anything", "web search + its own links", 9.5,
+    "info", "Just a meme", "no post, news, person or product behind it, and it isn't posing as anything");
   // "looks legit" means nothing alarming at all: a coin that isn't a LARP but has a serial-rugger dev, a dev who
   // shipped out most of the supply, dev-funded wallet clusters or a big launch bundle is only "unverified"
   const severe = [
     dh && !dh.unknown && dh.serialLauncher && dh.rugged >= 2 && "serial rugger",
-    dev && !dev.unknown && dev.sentOutPct >= 50 && "dev shipped out most of the supply",
+    dev && !dev.unknown && dev.sentOutPct >= 50 && !ownSupply && "dev shipped out most of the supply",
     cl && !cl.unknown && cl.clusters.some((c) => c.fundedByDev && c.holdsPct >= 3) && "wallets tied to the dev",
     ln && !ln.unknown && ln.bundle.pct + ln.snipers.pct >= 20 && "big launch bundle",
   ].filter(Boolean);
@@ -274,6 +306,7 @@ function decide(ch) {
     : verdict === "unverified" && severe.length ? `the red flags clearing: ${severe.join(", ")}`
     : verdict === "unverified" && claimsTie ? `${who} acknowledging it, or saying it isn't theirs`
     : verdict === "unverified" ? "finding the source it's based on"
+    : verdict === "just a meme" ? "a real story or a community forming around it"
     : claimsTie ? `${who} disowning it` : "it starting to claim it's official";
   const lead = r.find((x) => (/legit/.test(verdict) ? x.level === "good" : x.level === "bad" || x.level === "warn")) || r[0];
   return { verdict, receipts: r.slice(0, 3), allReceipts: r, severe, wouldChange, tag: lead ? lead.title : null };
@@ -321,7 +354,7 @@ async function legitCheck(base, { fetcher, log = () => {} } = {}) {
   };
   const launchpad = base.pump || mint.endsWith("pump") ? "pump.fun" : base.market?.dex === "meteoradbc" ? "Meteora's bonding curve" : base.market?.dex || null;
   const checks = { claims: c, x: xc, xMentions: xm, xAck, xMode: x.mode(), copies: cp, website: ws, telegram: tg, devHistory: dh, launch: ln, clusters: cl, narrative: n, hype, self,
-    base: { dev: base.dev, fresh: base.fresh ? { fresh: base.fresh.fresh, checked: base.fresh.checked } : null, launchpad } };
+    base: { dev: base.dev, fresh: base.fresh ? { fresh: base.fresh.fresh, checked: base.fresh.checked } : null, launchpad, ageMin: base.ageMin ?? null, mint, pump: !!base.pump, read: base.readSays || null } };
   const d = decide(checks);
   log(`legit: verdict "${d.verdict}" in ${Date.now() - t0}ms`);
   return { ...d, checks, ms: Date.now() - t0, xProviders: x.providers(), rpcCalls: rpcCount() - c0, heliusCredits: rpcCredits() - k0, narrativeUsd: n?.usd ?? 0 };

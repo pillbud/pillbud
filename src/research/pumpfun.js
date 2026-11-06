@@ -28,6 +28,7 @@ async function coinUncached(fetcher, mint) {
   const j = await api(fetcher, `/coins-v2/${mint}`);
   return {
     mint: j.mint, name: j.name?.trim(), symbol: j.symbol?.trim(), creator: j.creator, createdAt: j.created_timestamp, complete: !!j.complete,
+    bondingCurve: j.bonding_curve || null, // only coins launched on pump.fun have one
     image: j.image_uri, metadataUri: j.metadata_uri, description: (j.description || "").trim().slice(0, 500) || null, twitter: j.twitter || null, telegram: j.telegram || null, website: j.website || null,
     mcUsd: j.usd_market_cap ?? j.market_cap_usd ?? null, athMcUsd: j.ath_market_cap ?? null, athAt: j.ath_market_cap_timestamp ?? null,
     lastTradeAt: j.last_trade_timestamp ?? null, live: !!j.is_currently_live, liveViewers: j.is_currently_live ? j.num_participants ?? null : null,

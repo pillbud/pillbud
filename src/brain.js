@@ -44,7 +44,7 @@ function sentencer(onSentence, maxWords = 20) {
 async function verdictLines(facts, toneName = settings().tone) {
   const system = `${BASE}\n${tone.style(toneName)}
 Write exactly 2 lines, each 12 words or fewer, separated by a newline:
-line 1: starts with the verdict in plain words, optionally after its matching reaction word: "Ooh, looks legit", "Hm, likely a LARP", "Hm, unverified", "Hm, a copycat of the earlier $TICKER" (never read an address). Then a short remark in your voice. Opinions only about what the facts show.
+line 1: starts with the verdict in plain words, optionally after its matching reaction word: "Ooh, looks legit", "Hm, likely a LARP", "Hm, unverified", "Hm, just a meme", "Hm, a copycat of the earlier $TICKER" (never read an address). Then a short remark in your voice. Opinions only about what the facts show.
 line 2: the single most important receipt (from FACTS.legit.receipts, the X research, the dev, or the state), with a number if there is one.`;
   const t = await call("verdict", system, [{ role: "user", content: `FACTS ${JSON.stringify(facts)}` }], 120);
   const lines = t.text.split(/\n+|(?<=[.!?])\s+(?=[A-Z$])/).map((l) => tone.shorten(tone.clean(l), 18)).filter(Boolean).slice(0, 2);
@@ -140,11 +140,11 @@ const READ = (toneName, search) => `${BASE}
 ${tone.style(toneName)}
 A trader just opened this coin. Tell them what it is: this is the most important thing you say, and it has to be right.
 ${search ? "Nothing readable was linked: use web search (1 or 2 quick searches) to find what the coin is based on (a tweet, a news story, a meme, a stream, a person)." : "Use the FACTS only."}
-Write exactly this and nothing else: one tag, [real] [larp] [copycat] or [unclear], then 2 or 3 short spoken sentences, 50 words at most in all. No JSON, no notes, no "I'll search", no plan.
+Write exactly this and nothing else: one tag, [real] [larp] [copycat] [meme] or [unclear], then 2 or 3 short spoken sentences, 50 words at most in all. No JSON, no notes, no "I'll search", no plan.
 1. What it's about and where it came from, with what the source actually says: who said what, and when. For an X post or a video, always give the key words of what was said.
 2. Why people might care right now, only if the facts show it (it's brand new, it's moving fast, the source is blowing up).
-3. Real, LARP or copycat, with the one receipt that matters.
-real = a fair meme or tribute on a real source. larp = it pretends to be official, or to be made by or tied to a person, brand or project, and nothing backs that; larp beats copycat. copycat = not a larp, but an earlier coin on the same source has more market cap (FACTS.lookalikes.sameStory), or it copies a big coin that already ran (FACTS.lookalikes.copiesBigCoin). The narrative is what counts: other coins that only share the name, ticker or picture are normal and not copies, so never call that a copycat and don't bring them up. unclear = not enough to say.
+3. Real, LARP, copycat or just a meme, with the one receipt that matters.
+real = a fair meme or tribute on a real source. meme = just a meme: an original meme with nothing outside it (no post, news, person, product or known meme it riffs on) that isn't posing as anything; say "just a meme" plainly, it's neither good nor bad news. larp = it pretends to be official, or to be made by or tied to a person, brand or project, and nothing backs that; larp beats copycat. copycat = not a larp, but an earlier coin on the same source has more market cap (FACTS.lookalikes.sameStory), or it copies a big coin that already ran (FACTS.lookalikes.copiesBigCoin). The narrative is what counts: other coins that only share the name, ticker or picture are normal and not copies, so never call that a copycat and don't bring them up. unclear = not enough to say.
 By source (FACTS.type and FACTS.sources):
 - an X post: who posted it (is it really their account: verified, followers), what exactly they said, how long ago, whether it's still up. For a famous person, say plainly if the account is the real one.
 - a YouTube or TikTok video: the title and channel, when it went up, and what in it the coin points at (from the description, chapters or the lines that mention the coin).
@@ -156,7 +156,7 @@ Never guess a source. If you can't find what it's based on, say "I couldn't find
 Times relative ("20 min ago"), numbers rounded. Never read out a contract address or a URL.`;
 
 const PRICE = { "claude-haiku-5-5": [0.10, 0.50], "claude-sonnet-5-5": [2, 10] }; // $ per million tokens (2026-10)
-const TAG = /\[(real|larp|copycat|unclear)\]/i;
+const TAG = /\[(real|larp|copycat|meme|unclear)\]/i;
 
 /**
  * the read, streamed: onTag(verdict) as soon as the tag arrives, then onSentence(s) per sentence. Nothing before the

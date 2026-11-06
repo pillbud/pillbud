@@ -73,7 +73,9 @@ function sellImpact(f, pct) {
 function stamp(f) {
   if (!f?.holders) return { word: "unknown", score: null, tag: "couldn't read the holders", line: "couldn't read who holds it right now", findings: [], notChecked: ["holders"] };
   const devs = devWalletsOf(f), devSet = new Set(devs);
-  const people = f.holders.filter((h) => h.wallet);
+  const people = f.holders.filter((h) => h.wallet && !h.active);
+  const act = f.holders.filter((h) => h.active), actPct = act.reduce((s, h) => s + (h.pct || 0), 0);
+  const young = f.ageMin != null && f.ageMin < 3 * 1440;
   const pctOf = new Map(people.map((h) => [h.owner, h.pct || 0]));
   const top10 = people.slice(0, 10).reduce((s, h) => s + (h.pct || 0), 0);
   const devList = f.dev ? [f.dev, ...(f.dev.others || [])] : [];
@@ -109,6 +111,18 @@ function stamp(f) {
   else if (linked && linked.holdsPct >= 2) add("info", `${linked.wallets.length} linked wallets hold ${pctTxt(linked.holdsPct)}`, lw, linkEvidence(linked), 4, null, linked.holdsPct);
   if (whale && whale.pct >= 20) add("rigged", `One wallet holds ${pctTxt(whale.pct)}`, short(whale.owner), "top holders (Helius)", 40, `one wallet holds ${pctTxt(whale.pct)}`, whale.pct);
   else if (whale && whale.pct >= 8) add("sketchy", `One wallet holds ${pctTxt(whale.pct)}`, short(whale.owner), "top holders (Helius)", 15, `one wallet holds ${pctTxt(whale.pct)}`, whale.pct);
+  // exchanges hold for their users; very active unnamed wallets are exchanges, market makers or bots (on a coin only
+  // days old, bots holding a share). Neither is one holder, so they're named here and left out of the whale numbers.
+  if (actPct >= 1) {
+    const by = new Map();
+    for (const h of act) { const k = h.label || "a very active wallet"; by.set(k, (by.get(k) || 0) + (h.pct || 0)); }
+    const list = [...by].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${pctTxt(v)}`).join(", ");
+    const exPct = act.filter((h) => h.exchange).reduce((s, h) => s + (h.pct || 0), 0);
+    const bots = young && actPct - exPct >= 8;
+    add(bots ? "sketchy" : "info", bots ? `Trading bots hold ${pctTxt(actPct - exPct)}` : exPct >= actPct / 2 ? `Exchanges hold ${pctTxt(actPct)}` : `Very active wallets hold ${pctTxt(actPct)}`,
+      `${list}: held for many users or traded all day, so not counted as one holder`, "exchange labels (Solscan) + wallet activity (Helius)",
+      bots ? 12 : 0, bots ? `bots hold ${pctTxt(actPct - exPct)}` : null, bots ? actPct - exPct : null);
+  }
   if (top10 >= 60) add("rigged", `The top 10 hold ${pctTxt(top10)}`, null, "top holders (Helius)", 35, `top 10 hold ${pctTxt(top10)}`, top10);
   else if (top10 >= 40) add("sketchy", `The top 10 hold ${pctTxt(top10)}`, null, "top holders (Helius)", 12, `top 10 hold ${pctTxt(top10)}`, top10);
   if (f.fresh?.freshPct >= 20) add("sketchy", `New wallets hold ${pctTxt(f.fresh.freshPct)}`, `${f.fresh.fresh} of the top ${f.fresh.checked} are under 3 days old`, "wallet ages (Helius)", 12, `fresh wallets hold ${pctTxt(f.fresh.freshPct)}`, f.fresh.freshPct);
@@ -120,16 +134,25 @@ function stamp(f) {
   if (!mi.mintAuthority && !mi.freezeAuthority) add("ok", "Can't be minted or frozen", "mint and freeze authority are given up", "the mint account (Helius)");
   if (f.holderCount) add("info", `${f.holderCount.count.toLocaleString("en-US")}${f.holderCount.capped ? "+" : ""} holders`, null, "token accounts (Helius)");
 
+  // dumped: the launch buyers and the dev already sold into it and the price collapsed, on a coin under a week old.
+  // Nothing left in who holds it to warn about, but "too early" or "fair" would read as a green light (seen 2026-11-05
+  // on $PEERLY, $LEVERAGED, $UMBRA)
+  const peak = f.pumpApi?.athMcUsd, nowMc = f.market?.mcUsd || f.pump?.mcUsd || f.pumpApi?.usdMarketCap;
+  const fell = peak && nowMc ? 1 - nowMc / peak : null;
+  const insidersSold = Math.max(0, (E?.tookPct || 0) - (E?.nowPct || 0)) + (d && !d.unknown && d.sold ? Math.max(0, (d.boughtPct || 0) - (d.holdsPct || 0)) : 0);
+  const dumped = fell != null && fell >= 0.7 && insidersSold >= 10 && f.ageMin != null && f.ageMin < 7 * 1440;
+  if (dumped) add("sketchy", `Insiders already sold ${pctTxt(insidersSold)}`, `the price is ${Math.round(fell * 100)}% below its peak`, "launch buyers' and the dev's token accounts (Helius) + pump.fun", 20, `insiders sold, ${Math.round(fell * 100)}% off its peak`, null);
+
   const notChecked = [!E ? "launch buyers" : null, !clOk ? "linked wallets" : null, !f.holderCount ? "holder count" : null, devList.length && !devRead.length ? "the dev's wallet" : null].filter(Boolean);
   const has = (lv) => F.some((x) => x.level === lv);
   // under 200 holders is too thin to call fair
   const tooEarly = (f.ageMin != null && f.ageMin < 20) || (f.holderCount && !f.holderCount.capped && f.holderCount.count < 200);
-  const word = has("rigged") ? "rigged" : has("sketchy") ? "sketchy" : tooEarly ? "too early" : "fair";
-  const band = { rigged: [0, 35], sketchy: [30, 65], "too early": [35, 65], fair: [60, 100] }[word];
+  const word = has("rigged") ? "rigged" : dumped ? "dumped" : has("sketchy") ? "sketchy" : tooEarly ? "too early" : "fair";
+  const band = { rigged: [0, 35], dumped: [10, 35], sketchy: [30, 65], "too early": [35, 65], fair: [60, 100] }[word];
   const score = Math.max(band[0], Math.min(band[1], 85 - F.reduce((s, x) => s + x.pts, 0)));
   const rank = { rigged: 0, sketchy: 1, info: 2, ok: 3 };
   F.sort((a, b) => rank[a.level] - rank[b.level] || b.pts - a.pts);
-  const worst = F.find((x) => x.level === "rigged" || x.level === "sketchy");
+  const worst = (dumped && !has("rigged") && F.find((x) => /^Insiders already sold/.test(x.title))) || F.find((x) => x.level === "rigged" || x.level === "sketchy");
   const impact = worst?.pct ? sellImpact(f, worst.pct) : null;
   const soldOn = E && E.tookPct >= 5 && E.nowPct < 2;
   return {
@@ -143,6 +166,7 @@ function stamp(f) {
       : /frozen/.test(worst.tag) ? "only the creator giving up the freeze authority"
       : /mint more/.test(worst.tag) ? "only the creator giving up the mint authority"
       : /serial/.test(worst.tag || "") ? "nothing about this coin itself: it's the dev's record"
+      : word === "dumped" ? "new buyers bringing it back; the insiders are already out"
       : "those wallets selling down, or the supply spreading out",
     findings: F.map(({ level, title, detail, text, evidence }) => ({ level, title, detail, text, evidence })),
     notChecked, top10: r1(top10), insidersPct: r1(insiders),

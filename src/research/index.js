@@ -9,6 +9,8 @@ const market = require("./market");
 const { marketState, money, ago } = require("./chart");
 const { rpcCount, rpcCredits } = require("./net");
 const holderMod = require("./holders");
+const trench = require("./trench");
+const { exchangeOf, EXCHANGE_SOL } = require("./labels");
 const within = (p, ms) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error(`over ${ms} ms`)), ms))]);
 
 const round = (x, d = 1) => (x == null || !isFinite(x) ? null : Math.round(x * 10 ** d) / 10 ** d);
@@ -62,14 +64,27 @@ async function research(mint, { pairHint, fetcher, log = () => {}, deep = false 
     step("dev", Promise.all(devWallets.map((w) => chain.dev(mint, w, mi.program, supply).then((d) => d && { ...d, role: roleOf(w) })))),
     step("holder count", within(holderMod.holderCount(mint), 3500)), // a big coin can take longer: then it's left out
   ]);
-  const fresh = hs ? await step("fresh wallets", chain.freshWallets(hs.filter((h) => !devWallets.includes(h.owner)))) : null;
+  // who among the top holders isn't one person: named exchange wallets, exchange-size wallets (50,000+ SOL) and very
+  // active ones (exchanges, market makers, bots). Checked side by side with the fresh wallets.
+  const top12 = (hs || []).filter((h) => h.wallet && !devWallets.includes(h.owner)).slice(0, 12).map((h) => h.owner);
+  const [fresh, active, sol] = hs ? await Promise.all([
+    step("fresh wallets", chain.freshWallets(hs.filter((h) => !devWallets.includes(h.owner) && !exchangeOf(h.owner)))),
+    step("very active holders", trench.activeWallets(top12.filter((w) => !exchangeOf(w)))),
+    step("holder SOL", chain.solBalances((hs || []).filter((h) => h.wallet).map((h) => h.owner))), // all top 20: one call
+  ]) : [null, null, null];
+  for (const h of hs || []) {
+    const name = exchangeOf(h.owner), solBal = sol?.get(h.owner) || 0;
+    if (name) { h.active = true; h.label = name; h.exchange = true; }
+    else if (solBal >= EXCHANGE_SOL) { h.active = true; h.label = `an exchange-size wallet (${Math.round(solBal / 1000)}k SOL)`; h.exchange = true; }
+    else if (active?.get(h.owner)) { h.active = true; h.label = "a very active wallet"; }
+  }
   // the main dev = whoever made the launch buy (else the first one read); any dev wallet selling counts as the dev selling
   const devList = (dv || []).filter(Boolean);
   const mainDev = devList.find((d) => !d.unknown && d.boughtPct > 0) || devList.find((d) => !d.unknown) || devList[0] || null;
   const dev = mainDev && { ...mainDev, others: devList.filter((d) => d !== mainDev), anySold: devList.some((d) => d.sold) };
 
   // holders: people only (the curve / AMM pool / lockers are program accounts)
-  const people = (hs || []).filter((h) => h.wallet);
+  const people = (hs || []).filter((h) => h.wallet && !h.active);
   const programs = (hs || []).filter((h) => !h.wallet);
   const top10 = people.slice(0, 10).reduce((s, h) => s + (h.pct || 0), 0);
 

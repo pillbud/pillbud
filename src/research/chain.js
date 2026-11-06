@@ -68,6 +68,14 @@ async function holders(mint, supply) {
   }).filter((h) => h.tokens > 0);
 }
 
+/** wallet -> SOL balance, for up to 100 wallets in one call */
+async function solBalances(wallets) {
+  const ws = [...new Set(wallets)].filter(Boolean).slice(0, 100);
+  if (!ws.length) return new Map();
+  const r = await rpc("getMultipleAccounts", [ws, { encoding: "base64", dataSlice: { offset: 0, length: 0 } }]);
+  return new Map(ws.map((w, i) => [w, r.value[i] ? r.value[i].lamports / 1e9 : 0]));
+}
+
 /** every change to one wallet's balance of the coin, from the history of its token account */
 async function walletTrades(owner, mint, account) {
   const out = [];
@@ -109,7 +117,7 @@ async function dev(mint, creator, program, supply) {
   const pct = (x) => (supply ? round((x / supply) * 100, 2) : null);
   return {
     wallet: creator, account,
-    boughtPct: pct(sum("buy")), soldPct: pct(sum("sell")), sentOutPct: pct(sum("sent")), holdsPct: pct(bal),
+    boughtPct: pct(sum("buy")), soldPct: pct(sum("sell")), sentOutPct: pct(Math.min(sum("sent"), sum("buy") + sum("received"))), // tokens sent, got back and sent again count once holdsPct: pct(bal),
     holdsTokens: bal, sold: sells.length > 0, sells: sells.length,
     soldSol: round(sells.reduce((s, t) => s + t.sol, 0), 3),
     lastSellAt: sells.length ? sells[sells.length - 1].at : null,
@@ -174,4 +182,4 @@ async function chainCandles(mint, solUsd, supply, bucketMs = 60_000) {
 
 const round = (x, d = 2) => (x == null || !isFinite(x) ? null : Math.round(x * 10 ** d) / 10 ** d);
 
-module.exports = { mintInfo, bondingCurve, launchTx, holders, dev, freshWallets, devBalance, chainCandles, curvePda, isWallet, TOKEN, TOKEN22 };
+module.exports = { mintInfo, bondingCurve, launchTx, holders, dev, freshWallets, devBalance, chainCandles, curvePda, isWallet, TOKEN, TOKEN22, solBalances };

@@ -100,6 +100,33 @@ function busyOne(w) {
   busyAsking.set(w, p);
   return p;
 }
+// Very active wallets: 200 transactions in the last 6 hours. Exchanges' hot wallets, market makers and trading bots
+// look like this; a person holding a coin doesn't. They hold tokens for many people (or flip them all day), so they're
+// never one holder: left out of linking and of the whale and top-10 numbers (2026-11-05: Binance's 9WzD...AWWM held
+// 31% of $PNUT and was called a whale, and on $BONK eleven exchange wallets were "linked"). Remembered for a day.
+const ACTIVE_N = 200, ACTIVE_SPAN_H = 6;
+const activeAsking = new Map();
+function activeOne(w) {
+  const store = busyStore(), k = `active:${w}`, c = store.get(k);
+  if (c && Date.now() - c.at < 24 * 36e5) return Promise.resolve(c.active);
+  if (activeAsking.has(w)) return activeAsking.get(w);
+  const p = rpc("getSignaturesForAddress", [w, { limit: ACTIVE_N }])
+    .then((sigs) => {
+      const oldest = sigs[sigs.length - 1]?.blockTime;
+      const active = sigs.length >= ACTIVE_N && !!oldest && Date.now() / 1000 - oldest < ACTIVE_SPAN_H * 3600;
+      store.set(k, { active, at: Date.now() }); saveBusy(); return active;
+    })
+    .catch(() => null) // unknown: counted as a normal holder
+    .finally(() => activeAsking.delete(w));
+  activeAsking.set(w, p);
+  return p;
+}
+/** wallet -> true when it's very active (see above) */
+async function activeWallets(list) {
+  const ws = [...new Set(list)].filter(Boolean);
+  const got = await Promise.all(ws.map(activeOne));
+  return new Map(ws.map((w, i) => [w, got[i] === true]));
+}
 async function busyWallets(list) {
   const ws = [...new Set(list)];
   const got = await Promise.all(ws.map(busyOne));
@@ -223,6 +250,7 @@ async function transferLinks({ holders, mint, max = 12, wantFunder = new Set() }
 /** linked wallets: a shared first funder (or the dev as funder), plus proof links between holders (tokens sent between
  *  them, one paying for another's buy, buys in the same transaction). Groups are joined across all of these. */
 async function clusters({ holders, supply, devWallets, early, mint }) {
+  holders = holders.filter((h) => !h.active); // exchanges and bots aren't anyone's second wallet
   const people = holders.filter((h) => h.wallet);
   const top10 = people.slice(0, 10);
   const pctOf = new Map(people.map((h) => [h.owner, h.pct || 0]));
@@ -265,11 +293,15 @@ async function clusters({ holders, supply, devWallets, early, mint }) {
   // union-find over wallets; each union remembers how it was proven
   const parent = new Map(), how = new Map(), sigs = new Map();
   const find = (x) => { if (!parent.has(x)) parent.set(x, x); let r = x; while (parent.get(r) !== r) r = parent.get(r); parent.set(x, r); return r; };
+  // two wallets already in one group can be joined again (big coins have many links between the same wallets): merge
+  // the other group's labels and proofs only when it really is another group, or the proof list doubles every time
+  // (2026-11-05: "Invalid array length" on every coin over $10M)
   const join = (a, b, label, sig) => {
-    const ra = find(a), rb = find(b);
-    const r = ra === rb ? ra : (parent.set(rb, ra), ra);
-    const hs = new Set([...(how.get(ra) || []), ...(how.get(rb) || []), label]); how.set(r, hs);
-    const ss = [...(sigs.get(ra) || []), ...(sigs.get(rb) || []), ...(sig ? [sig] : [])]; sigs.set(r, ss);
+    const ra = find(a), rb = find(b), merge = ra !== rb;
+    if (merge) parent.set(rb, ra);
+    how.set(ra, new Set([...(how.get(ra) || []), ...(merge ? how.get(rb) || [] : []), label]));
+    sigs.set(ra, [...new Set([...(sigs.get(ra) || []), ...(merge ? sigs.get(rb) || [] : []), ...(sig ? [sig] : [])])].slice(0, 6));
+    if (merge) { how.delete(rb); sigs.delete(rb); }
   };
   for (const f of fund) {
     if (!f.funder || f.error || busy.get(f.funder)) continue;
@@ -357,7 +389,10 @@ async function devHistory(fetcher, devWallets, thisMint) {
   await pool(recent.filter((c) => !c.complete), 3, async (c) => { c.exit = await devExitOn(c.dev, c.mint).catch(() => null); });
   for (const c of details) {
     const fell = c.athMcUsd && c.mcUsd != null ? c.mcUsd / c.athMcUsd : null;
-    if (c.complete) c.ended = "bonded";
+    // bonded and then faded to nothing is dead, not a success (2026-11-05: $MOODENG's dev had 21 "bonded" coins, all
+    // now worth $3k to $6k)
+    if (c.complete && c.mcUsd != null && c.mcUsd < 10_000) c.ended = "dead";
+    else if (c.complete) c.ended = "bonded";
     else if (c.exit && c.exit.soldPct >= 1 && c.exit.soldWithinMin != null && c.exit.soldWithinMin <= 180 && (fell == null || fell < 0.4 || c.mcUsd < 10_000)) c.ended = "rugged";
     else if (c.mcUsd != null && c.mcUsd < 8_000 && (!c.lastTradeAt || now - c.lastTradeAt > 12 * 36e5)) c.ended = "dead";
     else if (c.exit === undefined && c.mcUsd != null && c.mcUsd < 8_000) c.ended = "dead";
@@ -373,4 +408,4 @@ async function devHistory(fetcher, devWallets, thisMint) {
   };
 }
 
-module.exports = { launch, clusters, proofLinks, solLinks, busyWallets, linkPhrase, linkWays, linkEvidence, devHistory, funderOf, tradesOf, short };
+module.exports = { launch, clusters, proofLinks, solLinks, busyWallets, activeWallets, linkPhrase, linkWays, linkEvidence, devHistory, funderOf, tradesOf, short };
