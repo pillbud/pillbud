@@ -1,8 +1,10 @@
 # pillbud
 
+![pillbud: know before you buy.](brand/readme-banner.png)
+
 A desktop buddy for Solana memecoins. Open any coin in your browser and pillbud reads it in seconds: what the coin is about, the source behind it, whether the story is real, whether the holders are fair, and what just changed. It sits on your desktop and speaks up when something matters.
 
-**Site:** [pillbud.vercel.app](https://pillbud.vercel.app) · **X:** [@pillbud](https://x.com/pillbud)
+**Site:** [pillbud.fun](https://pillbud.fun) · **X:** [@pillbud](https://x.com/pillbud)
 
 pillbud is read-only. It never connects to a wallet, never signs anything and never trades.
 
