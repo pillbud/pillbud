@@ -27,6 +27,20 @@ pillbud is read-only. It never connects to a wallet, never signs anything and ne
 
 **Talk to it.** Hold `Ctrl + Alt` and ask a question about the coin. Text mode is the default; voice is optional.
 
+## The APIs it uses
+
+Every check calls outside services. The paid ones are the running cost of each check, and the creator fees cover them.
+
+| Service | What pillbud uses it for | Cost | Code |
+|---|---|---|---|
+| [Claude](https://www.anthropic.com/api) (Anthropic) | the read, the answers when you ask it something, and judging the app test | paid, per call | [read.js](src/read.js), [brain.js](src/brain.js), [narrative.js](src/research/narrative.js), [probe.js](src/research/probe.js) |
+| [Helius](https://www.helius.dev) | Solana data: holders, the dev's wallet, linked wallets, launch buys, fee settings | paid plan (the free plan works, slower) | [chain.js](src/research/chain.js), [holders.js](src/research/holders.js), [trench.js](src/research/trench.js), [fees.js](src/research/fees.js) |
+| [twitterapi.io](https://twitterapi.io) or the [X API](https://developer.x.com) | finding the tweet behind a coin and who really posted it | paid, per call | [x.js](src/research/x.js), [legit.js](src/research/legit.js) |
+| [ElevenLabs](https://elevenlabs.io) | speech to text when you ask pillbud out loud | paid, per minute | [voice.js](src/voice.js) |
+| [DexScreener](https://docs.dexscreener.com) | price, market cap, liquidity, pairs | free | [market.js](src/research/market.js) |
+| [GeckoTerminal](https://www.geckoterminal.com/dex-api) | price history for the chart | free | [market.js](src/research/market.js) |
+| [pump.fun](https://pump.fun) | the coin's page: creator, links, description | free | [pumpfun.js](src/research/pumpfun.js) |
+
 ## How it sees the coin
 
 You don't paste anything. pillbud picks up the coin you're on from:
