@@ -7,7 +7,7 @@ const costs = require("./costs");
 const { isAddress } = require("./detect");
 const { getJson } = require("./research/net");
 
-const client = new Anthropic({ apiKey: keys.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 30000 });
+const client = new Anthropic({ apiKey: keys.ANTHROPIC_API_KEY, baseURL: keys.ANTHROPIC_BASE_URL, maxRetries: 1, timeout: 30000 });
 const PROMPT = `This is a screenshot of a trader's screen. Find the Solana memecoin they are looking at.
 Answer with ONLY one JSON object:
 {"ca":"the full contract address if it's visible in full (32 to 44 base58 characters, often ending in pump), else null",

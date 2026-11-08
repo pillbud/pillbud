@@ -18,6 +18,8 @@ function applyPrefs(p) {
   prefs = { ...prefs, ...p }; sfx.volume = prefs.volume; sfx.muted = prefs.muted || TEST;
   document.documentElement.style.setProperty("--z", String(prefs.balloonZoom || 1)); // Balloon size (tray)
   document.body.dataset.look = prefs.balloonLook || "brand"; // Balloon look (tray); pillbud is the default
+  document.body.dataset.view = prefs.balloonView || "full"; // Coin details (tray): everything, or just the read
+  updateMore();
 }
 window.pillbud.prefs().then(applyPrefs);
 window.pillbud.on("prefs", applyPrefs);
@@ -39,11 +41,46 @@ function hideBalloonSoon(ms) { clearTimeout(hideTimer); hideTimer = setTimeout((
 window.addEventListener("error", (e) => window.pillbud.log(`page error: ${e.message} @${e.lineno}`));
 window.addEventListener("unhandledrejection", (e) => window.pillbud.log(`page rejection: ${e.reason?.message || e.reason}`));
 $("close").addEventListener("click", () => hideBalloon());
+// the chip's x: clear the coin (pillbud stops watching it) until a different coin is opened
+$("chip-x").addEventListener("click", (e) => { e.stopPropagation(); window.pillbud.clearCoin(); setCard(null); textEl.replaceChildren(); statusEl.textContent = ""; hideBalloon(); });
 
 // ------------------------------------------------------------------ the card (built in main's coinCard; text only, never HTML)
 const ICON = { bad: "\u2715", warn: "!", good: "\u2713", info: "i" };
 const cap = (t) => { const x = clean(t); return x.charAt(0).toUpperCase() + x.slice(1); };
 function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = clean(String(text)); return e; }
+// "Just tell me": the read only, and More details opens the rest (closed again on the next coin)
+const moreEl = $("more"), chooseEl = $("choose");
+let moreMint = null;
+function updateMore() {
+  const simple = document.body.dataset.view === "simple";
+  moreEl.classList.toggle("hidden", !simple || isEmpty());
+  moreEl.textContent = document.body.classList.contains("expanded") ? "Less" : "More details";
+}
+moreEl.addEventListener("click", () => { document.body.classList.toggle("expanded"); updateMore(); showBalloon(); hideBalloonSoon(45000); });
+// setup buttons: the line brings them (main's setup), or the mic list builds them here
+let chooseStep = null, onChoose = null;
+function showChoices(list, onPick) {
+  chooseEl.replaceChildren(...list.map((c) => { const b = document.createElement("button"); b.type = "button"; b.textContent = clean(c.label); b.dataset.value = c.value; return b; }));
+  onChoose = onPick; chooseEl.classList.remove("hidden"); showBalloon(); clearTimeout(hideTimer);
+}
+chooseEl.addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b || !onChoose) return;
+  const pick = onChoose; onChoose = null; chooseEl.classList.add("hidden"); pick(b.dataset.value, b.textContent);
+});
+// "Pick my mic": ask Windows for the mic once (so the names show), then list them as buttons
+async function micPick() {
+  try { const st = await navigator.mediaDevices.getUserMedia({ audio: true }); st.getTracks().forEach((t) => t.stop()); }
+  catch (e) {
+    layWords("Windows is blocking the microphone. Turn it on in Settings, Privacy, Microphone, then try again.").forEach((s) => s.classList.add("on"));
+    showChoices([{ value: "retry", label: "Try again" }, { value: "skip", label: "Not now" }], (v) => (v === "retry" ? micPick() : window.pillbud.choose("mic", "skip")));
+    return;
+  }
+  const mics = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "audioinput" && d.deviceId !== "communications");
+  heardEl.textContent = ""; layWords("Which mic should I listen to?").forEach((s) => s.classList.add("on"));
+  showChoices([...mics.slice(0, 5).map((d) => ({ value: d.deviceId, label: d.deviceId === "default" ? `Windows default (${(d.label || "").replace(/^Default - /, "")})` : d.label || "Microphone" })), { value: "skip", label: "Not now" }],
+    (v, label) => (v === "skip" ? window.pillbud.choose("mic", "skip") : window.pillbud.setMic(v, label)));
+}
+window.pillbud.on("mic-pick", () => { micPick().catch((e) => window.pillbud.log(`mic pick: ${e.message}`)); });
 const isEmpty = () => !tilesEl.childElementCount && !findingsEl.childElementCount && !numbersEl.childElementCount && readEl.classList.contains("hidden") && detailsEl.classList.contains("hidden");
 
 function setCard(c) {
@@ -77,6 +114,8 @@ function setCard(c) {
   if (c?.now) { const d = el("div", `num wide ${c.now.kind || ""}`); d.append(el("div", "k", "Right now"), el("div", "v", cap(c.now.text) + (c.bonding ? ` · ${c.bonding}` : ""))); nums.push(d); }
   numbersEl.replaceChildren(...nums);
   scrollEl.classList.toggle("empty", isEmpty());
+  if (c?.mint && c.mint !== moreMint) { moreMint = c.mint; document.body.classList.remove("expanded"); }
+  updateMore();
   // chip under the buddy: which coin it's on
   if (!c) { chip.classList.add("hidden"); return; }
   $("chip-img").src = c.image || "";
@@ -105,6 +144,7 @@ window.pillbud.on("details", (d) => {
   detailsEl.replaceChildren(...rows.flatMap(([k, v]) => { const h = document.createElement("h4"), p = document.createElement("p"); h.textContent = k; p.textContent = clean(v); return [h, p]; }));
   detailsEl.classList.toggle("hidden", !rows.length);
   scrollEl.classList.toggle("empty", isEmpty());
+  updateMore();
   showBalloon(); hideBalloonSoon(45000);
 });
 
@@ -153,6 +193,7 @@ window.pillbud.on("hush", () => { if (current) { current.stopped = true; current
 
 async function playLine(L) {
   const m = L.meta;
+  if (m.kind !== "choose") chooseEl.classList.add("hidden");
   if (m.coin) setCard(m.coin);
   if (m.kind === "answer" || m.kind === "reaction" || m.coin?.verdict) statusEl.textContent = "";
   heardEl.textContent = m.heard ? `You: “${clean(m.heard)}”` : m.append ? heardEl.textContent : "";
@@ -167,6 +208,7 @@ async function playLine(L) {
   const hold = m.mood === "celebrate" || m.mood === "panic" || m.mood === "rugged" ? 3500 : 600;
   mood(m.mood === "rugged" ? "rugged" : "idle", hold);
   if (REACT_MOOD[m.mood] != null) setTimeout(() => bud.mood(card?.mood || 0), 6000);
+  if (m.kind === "choose") { chooseStep = m.step; showChoices(m.choices || [], (v) => window.pillbud.choose(chooseStep, v)); return; } // stays up until they pick
   hideBalloonSoon(m.kind === "take" ? 25000 : 15000);
 }
 
@@ -265,7 +307,8 @@ let recWanted = false; // false once the keys are let go (or the hold turns out 
 async function startRec() {
   if (recorder) return;
   recWanted = true;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } }); }
+  const want = { echoCancellation: true, noiseSuppression: true, channelCount: 1 };
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: prefs.micId ? { ...want, deviceId: { exact: prefs.micId } } : want }).catch(() => navigator.mediaDevices.getUserMedia({ audio: want })); }
   catch (e) { layWords(`I can't hear you: the microphone is blocked (${e.name}).`).forEach((s) => s.classList.add("on")); showBalloon(); window.pillbud.log(`mic: ${e.message}`); return; }
   if (!recWanted) { stream.getTracks().forEach((t) => t.stop()); return; }
   chunks = [];

@@ -6,7 +6,7 @@ const WebSocket = require("ws");
 const { keys } = require("./env");
 
 function makeFeed(log = () => {}) {
-  const url = (keys.HELIUS_RPC_URL || "").replace(/^http/, "ws");
+  const url = keys.HELIUS_WS_URL || (keys.HELIUS_RPC_URL || "").replace(/^http/, "ws");
   let ws = null, open = false, nextId = 1, retry = 0, pinger = null, reconnects = 0, lastMsg = Date.now();
   const pending = new Map();   // request id -> { account, params, handler, key }
   const subs = new Map();      // subscription id -> handler

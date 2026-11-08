@@ -141,6 +141,7 @@ function stamp(f) {
   const fell = peak && nowMc ? 1 - nowMc / peak : null;
   const insidersSold = Math.max(0, (E?.tookPct || 0) - (E?.nowPct || 0)) + (d && !d.unknown && d.sold ? Math.max(0, (d.boughtPct || 0) - (d.holdsPct || 0)) : 0);
   const dumped = fell != null && fell >= 0.7 && insidersSold >= 10 && f.ageMin != null && f.ageMin < 7 * 1440;
+  if (dumped) { const i = F.findIndex((x) => x.title === "Launch buyers already sold"); if (i >= 0) F.splice(i, 1); } // not good news on a dumped coin
   if (dumped) add("sketchy", `Insiders already sold ${pctTxt(insidersSold)}`, `the price is ${Math.round(fell * 100)}% below its peak`, "launch buyers' and the dev's token accounts (Helius) + pump.fun", 20, `insiders sold, ${Math.round(fell * 100)}% off its peak`, null);
 
   const notChecked = [!E ? "launch buyers" : null, !clOk ? "linked wallets" : null, !f.holderCount ? "holder count" : null, devList.length && !devRead.length ? "the dev's wallet" : null].filter(Boolean);

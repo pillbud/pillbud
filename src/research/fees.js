@@ -92,8 +92,45 @@ function shareKind(address, acc, devs) {
   return acc.owner === SYSTEM && isWallet(address) ? { kind: "wallet" } : { kind: "unknown" };
 }
 
+// pump.fun Charity Coins (with donate.gg, since 2026-04-30): a donation share names up to 5 nonprofits. pump.fun's own
+// record of the split (fun-block.pump.fun/sharing-config/<address>, read through the app's browser stack: plain scripts
+// get a Cloudflare page) lists each one's name, website, US tax ID and weight. The chain alone doesn't name them.
+async function charitiesOf(cfgAddress, fetcher) {
+  if (!fetcher) return null;
+  const r = await fetcher(`https://fun-block.pump.fun/sharing-config/${cfgAddress}`, { headers: { accept: "application/json" } });
+  if (!r.ok) return null;
+  const j = await r.json();
+  const out = [];
+  for (const s of j.shareholders || []) if (s.donation) for (const c of s.donation.charities || []) {
+    out.push({ name: c.name, taxId: c.taxId || null, website: c.website || null, weight: c.weight ?? null, sharePct: (s.shareBps || 0) / 100, donatedSol: r2(Number(s.donation.totalDonatedLamports || 0) / 1e9) });
+  }
+  return out.length ? out : null;
+}
+// each charity's US tax ID against the IRS records ProPublica publishes (free, no key): is it a registered 501(c)(3)?
+const irsCache = new Map();
+async function irsCheck(taxId) {
+  const ein = String(taxId || "").replace(/\D/g, "");
+  if (ein.length !== 9) return null;
+  if (irsCache.has(ein)) return irsCache.get(ein);
+  const r = await fetch(`https://projects.propublica.org/nonprofits/api/v2/organizations/${ein}.json`, { signal: AbortSignal.timeout(4000) });
+  const v = r.status === 404 ? { found: false } : r.ok ? (({ organization: o }) => ({ found: true, name: o.name, c3: o.subsection_code === 3, since: String(o.ruling_date || "").slice(0, 4) || null }))(await r.json()) : null;
+  if (v) irsCache.set(ein, v);
+  return v;
+}
+/** "HopeHealth and American Cancer Society, both registered US charities (IRS records)" */
+function charityLine(F) {
+  const C = F.charities || [];
+  if (!C.length) return null;
+  const names = C.map((c) => c.name);
+  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  const ok = C.filter((c) => c.irs?.found && c.irs.c3).length, missing = C.filter((c) => c.irs && !c.irs.found).length;
+  const proof = ok === C.length ? `${C.length > 1 ? "all registered US charities" : "a registered US charity"} (IRS records)` : missing ? `${missing} of them not found in IRS records` : "picked through pump.fun's Charity Coins";
+  const n = C.length, reg = ok === n ? `, ${n === 1 ? "a registered charity" : n === 2 ? "both registered charities" : "all registered charities"}` : "";
+  return { list, proof, verified: ok === n, donatedSol: C[0].donatedSol || 0, spoken: (pctTxt) => `${pctTxt} of the fees go to ${list}${reg}` };
+}
+
 /** how this coin's fees are set up, what is waiting, and (when they go to the dev) what the dev did with them */
-async function feeCheck({ mint, curveCreator, pf = {}, devWallets = [], supply, launchedAt }) {
+async function feeCheck({ mint, curveCreator, pf = {}, devWallets = [], supply, launchedAt, fetcher = null }) {
   const devs = new Set(devWallets.filter(Boolean));
   const burnedPct = supply && supply < 1e9 ? r2(((1e9 - supply) / 1e9) * 100) : 0;
   if (pf.holderReward) return { mode: "holders", burnedPct };
@@ -105,8 +142,9 @@ async function feeCheck({ mint, curveCreator, pf = {}, devWallets = [], supply, 
     const cfg = decodeConfig(Buffer.from(cfgAcc.value.data[0], "base64"));
     const accs = await rpc("getMultipleAccounts", [cfg.shares.map((s) => s.address), { encoding: "base64" }]).catch(() => ({ value: [] }));
     const shares = cfg.shares.map((s, i) => ({ ...s, ...shareKind(s.address, accs.value?.[i], devs) }));
-    const waiting = await waitingIn(cfgAddr);
-    return { mode: "split", locked: cfg.locked, adminIsDev: devs.has(cfg.admin), paused: cfg.status === "paused", shares, waitingSol: waiting.sol, burnedPct };
+    const [waiting, charities] = await Promise.all([waitingIn(cfgAddr), shares.some((s) => s.kind === "donation") ? charitiesOf(cfgAddr, fetcher).catch(() => null) : null]);
+    if (charities) await Promise.all(charities.map(async (c) => { c.irs = await irsCheck(c.taxId).catch(() => null); }));
+    return { mode: "split", locked: cfg.locked, adminIsDev: devs.has(cfg.admin), paused: cfg.status === "paused", shares, waitingSol: waiting.sol, burnedPct, charities };
   }
   if (!isWallet(curveCreator)) return { mode: "program", burnedPct, note: "the curve's creator is a program account pillbud can't read yet" };
   return { mode: "dev", ...(await devFlow({ mint, creator: curveCreator, launchedAt })), burnedPct };
@@ -184,6 +222,8 @@ function judge(claims, F, { ticker, devCoins = 0 } = {}) {
       const want = { buyback: "buyback", charity: "donation", rewards: null, giveaway: null, treasury: null, "no dev fees": null }[cl.kind];
       const devPct = pct("dev");
       if (cl.kind === "no dev fees") { devPct > 0 ? add("bad", `The dev gets ${devPct}% of the fees`, `it says the dev won't take fees, but the split is ${splitText(F.shares)}.${lockNote}`, cl.quote) : add("good", "The dev gets none of the fees", `the split is ${splitText(F.shares)}.${lockNote}`, cl.quote); continue; }
+      const ch = want === "donation" ? charityLine(F) : null;
+      if (ch && pct(want) >= 50) { add(F.locked && ch.verified ? "good" : "warn", `${pct(want)}% of the fees go to charity`, `${ch.list}, ${ch.proof}, through pump.fun's Charity Coins. ${ch.donatedSol ? `${ch.donatedSol} SOL donated so far` : "Nothing donated yet"}.${lockNote}`, cl.quote); out[out.length - 1].say = ch.spoken(`${pct(want)}%`); continue; }
       if (want && pct(want) >= 50) { const s = F.shares.find((x) => x.kind === want); add(F.locked ? "good" : "warn", `${pct(want)}% of the fees go to ${SHARE_NAME[want]}`, `set in pump.fun's own fee split${s?.paidSol ? `, ${s.paidSol} SOL paid out so far` : ", nothing paid out yet"}.${lockNote}`, cl.quote); continue; }
       const others = 100 - devPct;
       if (!want && others >= 50) { add(F.locked ? "good" : "warn", `${others}% of the fees go to other wallets`, `the split is ${splitText(F.shares)}. pillbud can't tell who owns them.${lockNote}`, cl.quote); continue; }
@@ -208,12 +248,15 @@ function judge(claims, F, { ticker, devCoins = 0 } = {}) {
   }
   // nothing promised: one plain line about the setup, when it's worth knowing
   if (!claims.length) {
-    if (F.mode === "holders") add("good", "The fees are paid to holders", "pump.fun holder rewards are on for this coin");
-    else if (F.mode === "cashback") add("info", "The fees go back to traders", "pump.fun cashback is on for this coin");
+    const ch = F.mode === "split" ? charityLine(F) : null;
+    if (F.mode === "holders") { add("good", "The fees are paid to holders", "pump.fun holder rewards are on for this coin"); out[out.length - 1].note = true; }
+    else if (F.mode === "cashback") { add("info", "The fees go back to traders", "pump.fun cashback is on for this coin"); out[out.length - 1].note = true; }
+    else if (ch) { add(ch.verified ? "good" : "info", `${pct("donation")}% of the fees go to charity`, `${ch.list}, ${ch.proof}, through pump.fun's Charity Coins. ${ch.donatedSol ? `${ch.donatedSol} SOL donated so far` : "Nothing donated yet"}.${lockNote}`); Object.assign(out[out.length - 1], { note: true, say: ch.spoken(`${pct("donation")}%`) }); }
+    else if (F.mode === "split" && pct("buyback") >= 50) { add("info", `${pct("buyback")}% of the fees go to buybacks`, `set in pump.fun's own fee split.${lockNote}`); out[out.length - 1].note = true; }
     else if (F.mode === "split" && F.shares.length) add("info", "The fees are split", `${splitText(F.shares)}.${lockNote}`);
     else if (F.mode === "dev" && c + w >= 0.5) add("info", `The dev has earned ${r2(c + w)} SOL in fees`, `${c} SOL claimed, ${w} SOL waiting${shareNote}`);
   }
   return out;
 }
 
-module.exports = { feeClaims, feeCheck, judge, vaultsOf, decodeConfig };
+module.exports = { feeClaims, feeCheck, judge, vaultsOf, decodeConfig, charitiesOf, irsCheck };

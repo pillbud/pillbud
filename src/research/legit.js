@@ -270,7 +270,7 @@ function decide(ch) {
     "info", `${ws.links.dead.length} dead links on its site`);
   const dh = ch.devHistory;
   if (dh && !dh.unknown && dh.otherCoins > 0) add(`the dev launched ${dh.otherCoins} other coins${dh.last30Days ? ` (${dh.last30Days} in the last 30 days)` : ""}; of ${dh.read} checked, ${dh.rugged} rugged (the dev sold within hours), ${dh.dead} dead, ${dh.bonded} bonded`, "pump.fun + Helius", dh.serialLauncher ? 8 : 4,
-    dh.rugged >= 2 ? "bad" : dh.serialLauncher ? "warn" : "info", `The dev launched ${dh.otherCoins} other coins`, dh.read ? `of ${dh.read} checked: ${dh.rugged} rugged, ${dh.dead} dead, ${dh.bonded} bonded` : "couldn't read how they ended");
+    dh.rugged >= 2 ? "bad" : "info", `The dev launched ${dh.otherCoins} other coins`, dh.read ? `of ${dh.read} checked: ${dh.rugged} rugged, ${dh.dead} dead, ${dh.bonded} bonded` : "couldn't read how they ended");
   const ln = ch.launch;
   if (ln && !ln.unknown && (ln.bundle.pct + ln.snipers.pct) >= 5) add(`${(ln.bundle.pct + ln.snipers.pct).toFixed(1)}% of supply was bought in the launch slot and the 3 after it, by ${ln.bundle.wallets.length + ln.snipers.wallets.length} wallets`, "Helius", 6,
     ln.bundle.pct + ln.snipers.pct >= 20 ? "warn" : "info", `${Math.round(ln.bundle.pct + ln.snipers.pct)}% was bought at launch`, `by ${ln.bundle.wallets.length + ln.snipers.wallets.length} wallets in the first slots`);

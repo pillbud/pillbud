@@ -5,7 +5,7 @@ const { keys, settings } = require("./env");
 const costs = require("./costs");
 const tone = require("./tone");
 
-const client = new Anthropic({ apiKey: keys.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 60000 });
+const client = new Anthropic({ apiKey: keys.ANTHROPIC_API_KEY, baseURL: keys.ANTHROPIC_BASE_URL, maxRetries: 1, timeout: 60000 });
 const MODEL = () => settings().model;
 
 const BASE = `You are pillbud, a pill-shaped desktop buddy for Solana memecoin traders (think Clippy, for the trenches).
@@ -152,7 +152,7 @@ By source (FACTS.type and FACTS.sources):
 - news: the outlet, the headline, and when it was published.
 - a meme with nothing linked: what the image and name show, and what it matches if you found it; else say it's a standalone meme.
 - FACTS.lookalikes: on the same source, whether this is the first coin and if another has more market cap; and whether it copies a big coin that already ran.
-Never guess a source. If you can't find what it's based on, say "I couldn't find what this is based on" and describe only what the coin itself shows (name, image, description).
+Don't judge claims about where its fees go (charity, buybacks, burns, holders): pillbud checks those on-chain right after you, so leave them out. Never guess a source. If you can't find what it's based on, say "I couldn't find what this is based on" and describe only what the coin itself shows (name, image, description).
 Times relative ("20 min ago"), numbers rounded. Never read out a contract address or a URL.`;
 
 const PRICE = { "claude-haiku-5-5": [0.10, 0.50], "claude-sonnet-5-5": [2, 10] }; // $ per million tokens (2026-10)

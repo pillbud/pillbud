@@ -6,7 +6,7 @@ const Anthropic = require("@anthropic-ai/sdk");
 const { keys } = require("../env");
 const costs = require("../costs");
 
-const client = new Anthropic({ apiKey: keys.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 60000 });
+const client = new Anthropic({ apiKey: keys.ANTHROPIC_API_KEY, baseURL: keys.ANTHROPIC_BASE_URL, maxRetries: 1, timeout: 60000 });
 // Haiku 5.5 takes the basic web search tool; Sonnet 5.5 the dynamic-filtering one (fallback if Haiku refuses)
 const PLANS = [
   // Haiku: thinking off (its default adaptive thinking ate the token budget before the JSON on 2026-11-03)

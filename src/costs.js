@@ -3,7 +3,7 @@
 // ElevenLabs Flash v2.5 bills 0.5 credits per character.
 const fs = require("node:fs");
 const path = require("node:path");
-const FILE = path.join(__dirname, "..", "costs.jsonl");
+const FILE = path.join(require("./env").DATA_DIR, "costs.jsonl");
 const PRICE = { "claude-haiku-5-5": [0.10, 0.50], "claude-sonnet-5-5": [2, 10], "claude-opus-5-5": [4, 20] };
 
 function log(entry) {

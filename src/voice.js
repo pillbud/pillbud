@@ -141,7 +141,7 @@ async function transcribeScribe(audio, type) {
   form.append("model_id", "scribe_v1");
   form.append("language_code", "en");
   form.append("file", new Blob([audio], { type }), type.includes("wav") ? "q.wav" : type.includes("mpeg") ? "q.mp3" : "q.webm");
-  const r = await fetch(`${XI}/speech-to-text`, { method: "POST", headers: { "xi-api-key": keys.ELEVENLABS_API_KEY }, body: form, signal: AbortSignal.timeout(30000) });
+  const r = await fetch(keys.ELEVENLABS_STT_URL || `${XI}/speech-to-text`, { method: "POST", headers: { "xi-api-key": keys.ELEVENLABS_API_KEY }, body: form, signal: AbortSignal.timeout(30000) });
   const j = await r.json();
   if (!r.ok) throw new Error(`ElevenLabs Scribe ${r.status}`);
   costs.log({ kind: "stt", engine: "scribe", ms: Date.now() - t0 });

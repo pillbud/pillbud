@@ -18,7 +18,49 @@
     "test:legit": "electron test/legit.test.js",
     "test:session": "bash test/session.sh p100",
     "test:alerts": "node test/alerts.test.js 4",
-    "test:push-latency": "node test/push-latency.test.js"
+    "test:push-latency": "node test/push-latency.test.js",
+    "dist": "electron-builder --win nsis --x64"
+  },
+  "build": {
+    "appId": "fun.pillbud.app",
+    "productName": "pillbud",
+    "copyright": "pillbud",
+    "asar": false,
+    "npmRebuild": false,
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "package.json",
+      "src/**/*",
+      "!src/**/*.py",
+      "renderer/**/*",
+      "assets/**/*",
+      "extension/**/*",
+      "brand/sprites/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "pillbud-setup-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "pillbud",
+      "deleteAppDataOnUninstall": false
+    }
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.4.0",
@@ -27,7 +69,8 @@
     "ws": "^8.22.1"
   },
   "devDependencies": {
-    "electron": "^45.2.1"
+    "electron": "^45.2.1",
+    "electron-builder": "^26.18.0"
   },
   "optionalDependencies": {
     "uiohook-napi": "^1.5.5"

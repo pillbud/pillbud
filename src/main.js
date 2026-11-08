@@ -116,7 +116,63 @@ function createWindow() {
 ipcMain.handle("sprites", () => { const p = spritePack(S().character); log(`character: ${p.manifest.name || "?"} (${p.manifest.kind}) from ${p.from}`); return p; });
 ipcMain.handle("prefs", () => publicPrefs());
 // balloonLook: pillbud ("brand") is the default look (2026-11-05)
-const publicPrefs = () => { const s = S(); return { mode: s.mode, textVoice: s.textVoice, tone: s.tone, volume: s.volume, muted: s.muted, dnd: s.dnd, balloonSize: s.balloonSize || "normal", balloonZoom: balloonZoom(), balloonLook: BALLOON_LOOKS.some(([k]) => k === s.balloonLook) ? s.balloonLook : "brand", test: TEST }; };
+const publicPrefs = () => { const s = S(); return { mode: s.mode, textVoice: s.textVoice, tone: s.tone, volume: s.volume, muted: s.muted, dnd: s.dnd, balloonSize: s.balloonSize || "normal", balloonZoom: balloonZoom(), balloonLook: BALLOON_LOOKS.some(([k]) => k === s.balloonLook) ? s.balloonLook : "brand", balloonView: s.balloonView || null, micId: s.micId || null, test: TEST }; };
+// Coin details: "full" = the whole card, "simple" = just the read with More details (2026-11-06). Asked on the
+// first launch in the balloon; changed later in the tray.
+let rebuildTray = () => {};
+// the chip's x: drop the coin and stop watching it; the same coin stays ignored until a different one is opened
+ipcMain.on("clear-coin", () => {
+  if (!state.mint) return;
+  log(`coin cleared by the user: ${state.mint}`);
+  state.dismissed = state.mint;
+  hush(); watcher.stop();
+  state.mint = null; state.coin = null; state.quick = null; state.read = null; state.readVerdict = null; state.history = [];
+  send("coin", null);
+});
+// First-launch setup (2026-11-06): how much to show, sound, and the mic. Asked in the balloon with buttons, one step
+// at a time; each answer is saved, so only what's missing is asked. Tray > Set up pillbud again runs all three.
+const SETUP = {
+  balloonView: { ask: "When you pull up a coin, do you want everything I find, or just the short version?", choices: [["full", "Everything"], ["simple", "Just tell me"]], done: (s) => !!s.balloonView },
+  // no talking voice for now (2026-11-06): little sounds while it types, or silent. Talking TO it stays (the mic step)
+  sound: { ask: "Should I make little sounds while I type, or stay silent?", choices: [["sounds", "Sound effects"], ["quiet", "Silent"]], done: (s) => !!s.soundSet },
+  mic: { ask: "Want to ask me things with your voice? Pick your mic and we'll test it.", choices: [["setup", "Pick my mic"], ["skip", "Not now"]], done: (s) => !!s.micSet },
+};
+const setupState = { queue: [], micTest: false };
+function setupAsk(prefix = "") {
+  const step = setupState.queue[0];
+  if (!step) { setPref("setupDone", true); say("All set. Pull up any coin and I'll take a look.", { mood: "wave", kind: "info" }); return; }
+  say(`${prefix}${SETUP[step].ask}`, { mood: prefix ? "wave" : "point", kind: "choose", sfx: prefix ? "hello" : null, choices: SETUP[step].choices.map(([value, label]) => ({ value, label })), step });
+}
+function setupStart(all = false) {
+  const s = S();
+  setupState.queue = Object.keys(SETUP).filter((k) => all || !SETUP[k].done(s));
+  setupState.micTest = false;
+  if (!setupState.queue.length) return false;
+  setupAsk(all ? "Let's set things up again. " : "Hi, I'm pillbud! Quick setup first. ");
+  return true;
+}
+function setupNext(said) {
+  setupState.queue.shift();
+  send("prefs", publicPrefs()); rebuildTray();
+  if (said) say(said, { mood: "point", kind: "info" });
+  setupAsk();
+}
+ipcMain.on("choose", (_e, { step, value }) => {
+  if (step !== setupState.queue[0]) return;
+  if (step === "balloonView" && ["full", "simple"].includes(value)) { setPref("balloonView", value); setupNext(value === "simple" ? "Got it. Tap More details whenever you want the rest." : "Got it, everything I find."); }
+  else if (step === "sound") {
+    setPref("mode", "text"); setPref("muted", value === "quiet"); setPref("soundSet", true);
+    setupNext(value === "sounds" ? "Okay, little sounds while I type." : "Okay, I'll stay silent.");
+  }
+  else if (step === "mic" && value === "skip") { setupState.micTest = false; setPref("micSet", true); setupNext("No problem. You can set the mic up later from the tray."); }
+  else if (step === "mic" && value === "setup") send("mic-pick");
+});
+// the mic picked in the balloon: saved, then a test (hold the keys, say hi, pillbud repeats what it heard)
+ipcMain.on("set-mic", (_e, { id, label }) => {
+  setPref("micId", id || null); setPref("micLabel", label || null); send("prefs", publicPrefs());
+  setupState.micTest = true;
+  say(`Got it, ${label || "that mic"}. Now hold Ctrl and Alt, say hi, then let go.`, { mood: "listen", kind: "choose", choices: [{ value: "skip", label: "Skip the test" }], step: "mic" });
+});
 
 const send = (ch, data) => { if (win && !win.isDestroyed()) win.webContents.send(ch, data); };
 
@@ -132,8 +188,8 @@ function say(text, o = {}) {
   text = tone.clean(text);
   if (!text) return null;
   if (s.dnd && !["answer", "info"].includes(o.kind)) return null; // do not disturb: only what was asked for
-  const line = { id: ++lineId, text, kind: o.kind || "info", mood: o.mood || "talk", sfx: o.sfx || null, coin: o.coin, heard: o.heard, append: !!o.append, details: o.details, mint: o.mint || state.mint,
-    t: { made: Date.now(), detect: o.tDetect, ask: o.tAsk }, chunks: [], done: false, mime: null, rate: 1, voice: s.mode === "voice" && !s.muted };
+  const line = { id: ++lineId, text, kind: o.kind || "info", mood: o.mood || "talk", sfx: o.sfx || null, coin: o.coin, heard: o.heard, append: !!o.append, details: o.details, mint: o.mint || state.mint, choices: o.choices, step: o.step,
+    t: { made: Date.now(), detect: o.tDetect, ask: o.tAsk }, chunks: [], done: false, mime: null, rate: 1, voice: false /* pillbud never speaks out loud (2026-11-06): text with sound effects, or silent */ };
   if (line.voice) {
     voice.speakStream(text, line.kind, (buf, mime) => {
       line.chunks.push(buf);
@@ -152,7 +208,7 @@ function say(text, o = {}) {
   return line;
 }
 function saveAudio(line, info) {
-  const dir = path.join(APP_DIR, "captures", "audio");
+  const dir = path.join(require("./env").DATA_DIR, "captures", "audio");
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, `${new Date().toISOString().replace(/[:.]/g, "-")}-${line.kind}.${info.mime.includes("wav") ? "wav" : "mp3"}`), Buffer.concat(line.chunks));
 }
@@ -162,7 +218,7 @@ function pump() {
   if (line.mint && state.mint && line.mint !== state.mint && line.kind !== "answer") { pump(); return; } // about a coin we left
   current = line;
   if (TEST) { sentLines.push({ text: line.text, kind: line.kind, mood: line.mood, sfx: line.sfx, coin: line.coin, heard: line.heard, append: line.append }); if (sentLines.length > 60) sentLines.shift(); }
-  send("line", { id: line.id, text: line.text, kind: line.kind, mood: line.mood, sfx: line.sfx, coin: line.coin, heard: line.heard, append: line.append, details: line.details, readMs: queue[0]?.append ? 250 : undefined, audio: line.voice ? "stream" : "none", mime: line.voice ? "audio/mpeg" : null });
+  send("line", { id: line.id, text: line.text, kind: line.kind, mood: line.mood, sfx: line.sfx, coin: line.coin, heard: line.heard, append: line.append, details: line.details, choices: line.choices, step: line.step, readMs: queue[0]?.append ? 250 : undefined, audio: line.voice ? "stream" : "none", mime: line.voice ? "audio/mpeg" : null });
   for (const c of line.chunks) send("line-audio", { id: line.id, chunk: c });
   if (line.done && line.voice) send("line-audio-end", { id: line.id, mime: line.mime, rate: line.rate });
   clearTimeout(watchdog);
@@ -258,8 +314,8 @@ let feed = null;
 const watcher = makeWatcher((r) => {
   log(`reaction ${r.type}: ${r.text}`);
   if (!state.coin || r.mint !== state.coin.mint) return;
-  if (r.type === "devSell" || r.type === "whaleSell") return; // not spoken (ask about it, or see the details)
-  const sfx = { pump: "pump", dump: "dump", devSell: "dump", devRug: "rug", whaleSell: "dump", bonded: "pump" }[r.type];
+  if (r.type === "devSell") return; // not spoken: every terminal already shows the dev selling (2026-11-06)
+  const sfx = { pump: "pump", dump: "dump", devSell: "dump", devRug: "rug", whaleSell: "dump", bundleSell: "dump", bonded: "pump" }[r.type];
   say(r.text, { mood: r.state, kind: "reaction", sfx, coin: coinCard(state.coin) });
 }, log, { get feed() { return feed; } });
 
@@ -271,6 +327,7 @@ async function onCoin(address, source, url) {
   let mint, pairHint;
   try { ({ mint, pairHint } = await resolveMint(address)); }
   catch (e) { log(`not a coin: ${address} (${e.message})`); return; }
+  if (state.dismissed) { if (mint === state.dismissed) return; state.dismissed = null; } // cleared with the chip's x
   if (state.mint === mint && (state.coin || state.read) && tDetect - (state.coin?.at || state.read?.at || 0) < 2 * 60_000) { if (state.coin) send("coin", coinCard(state.coin)); return; }
   const tn = S().tone;
   hush(); watcher.stop();
@@ -313,7 +370,7 @@ async function onCoin(address, source, url) {
     // where the creator fees go: pump.fun's fee setup and the money (about a second, chain only, every tier)
     if (!f.feesP && (f.pump || mint.endsWith("pump"))) {
       const t0 = Date.now();
-      f.feesP = feesMod.feeCheck({ mint, curveCreator: f.pump?.creator || f.pumpApi?.creator, pf: f.pumpApi || {}, devWallets: [...devWallets, f.pumpApi?.creator], supply: f.mintInfo.supply, launchedAt: f.createdAt })
+      f.feesP = feesMod.feeCheck({ mint, curveCreator: f.pump?.creator || f.pumpApi?.creator, pf: f.pumpApi || {}, devWallets: [...devWallets, f.pumpApi?.creator], supply: f.mintInfo.supply, launchedAt: f.createdAt, fetcher })
         .catch((e) => ({ unknown: e.message }))
         .then((F) => { f.feeSetup = F; log(`fees in ${Date.now() - t0} ms: ${F.unknown ? `unknown (${F.unknown})` : F.mode}`); return F; });
     }
@@ -323,6 +380,10 @@ async function onCoin(address, source, url) {
     // what the launch buyers still hold now: the holder stamp's sharpest input
     if (!f.early) f.early = await holderMod.earlyNow(f).catch((e) => ({ unknown: e.message }));
     if (state.mint !== mint) return;
+    if (!f.launch.unknown) {
+      const insiders = [...new Set([...(f.launch.bundle?.wallets || []), ...(f.launch.snipers?.wallets || []), ...Object.keys(f.early?.perWallet || {})])].filter((w) => !devWallets.includes(w));
+      watcher.watchGroup(insiders, "bundle", mint, f.mintInfo.program).catch((e) => log(`bundle watch: ${e.message}`));
+    }
     holderMod.refresh(f);
     send("coin", coinCard(f));
     log(`holders: ${f.holderStamp.word} (${f.holderStamp.score}) ${f.holderStamp.tag}`);
@@ -477,9 +538,15 @@ function judgeFees(f, tn, mint) {
   send("coin", coinCard(f));
   // a promise gets one spoken line: it checks out, or it doesn't
   const p = f.fees.find((x) => x.claim && (x.level === "good" || x.level === "bad"));
+  const nt = !p && f.fees.find((x) => x.note);
+  if (nt && !state.feeSaid) {
+    state.feeSaid = mint;
+    say(tone.shorten(nt.say ? `${nt.say.charAt(0).toUpperCase()}${nt.say.slice(1)}.` : `${nt.title}: ${nt.detail.charAt(0).toLowerCase()}${nt.detail.slice(1)}.`, 30), { kind: "take", mood: "point", sfx: null, coin: coinCard(f), mint });
+  }
   if (p && !state.feeSaid) {
     state.feeSaid = mint;
-    say(tone.shorten(p.level === "good" ? `The fee promise checks out: ${p.title.charAt(0).toLowerCase()}${p.title.slice(1)}.` : `Heads up: ${p.title.charAt(0).toLowerCase()}${p.title.slice(1)}. ${p.detail.charAt(0).toUpperCase()}${p.detail.slice(1)}.`, 30), { kind: "take", mood: p.level === "good" ? "point" : "think", sfx: p.level === "bad" ? "larp" : null, coin: coinCard(f), mint });
+    say(tone.shorten(p.say && p.level === "good" ? `The fee promise checks out: ${p.say}.`
+      : p.level === "good" ? `The fee promise checks out: ${p.title.charAt(0).toLowerCase()}${p.title.slice(1)}.` : `Heads up: ${p.title.charAt(0).toLowerCase()}${p.title.slice(1)}. ${p.detail.charAt(0).toUpperCase()}${p.detail.slice(1)}.`, 30), { kind: "take", mood: p.level === "good" ? "point" : "think", sfx: p.level === "bad" ? "larp" : null, coin: coinCard(f), mint });
   }
 }
 /** a fee promise that the money contradicts can't look legit (a claim that isn't real is a LARP) */
@@ -591,6 +658,13 @@ async function askAudio(buf, type) {
     const t = await voice.transcribe(buf, type);
     log(`heard (${t.engine}, ${t.ms} ms): ${t.text}`);
     metric({ what: "transcribe", ms: t.ms, audioSec: t.audioSec });
+    if (setupState.micTest) {
+      const said = t.text.trim();
+      if (!said) { say("I didn't catch anything. Hold Ctrl and Alt and try again.", { mood: "think", kind: "choose", choices: [{ value: "skip", label: "Skip the test" }], step: "mic" }); return t; }
+      setupState.micTest = false; setPref("micSet", true);
+      if (setupState.queue[0] === "mic") setupNext(`I heard you: "${said.slice(0, 80)}". Your mic works.`);
+      return t;
+    }
     ask(t.text.trim(), tAsk);
     return t;
   } catch (e) { log(`transcribe failed: ${e.message}`); say("My ears aren't working right now.", { mood: "panic", kind: "answer" }); return { error: e.message }; }
@@ -760,20 +834,22 @@ function setupHotkey() {
 function setupTray() {
   tray = new Tray(nativeImage.createFromPath(path.join(APP_DIR, "assets", "tray.png")));
   const set = (k, v) => { setPref(k, v); send("prefs", publicPrefs()); tray.setContextMenu(menu()); };
+  rebuildTray = () => tray.setContextMenu(menu());
   const menu = () => {
     const s = S();
     return Menu.buildFromTemplate([
       { label: state.coin ? `On $${state.coin.symbol || "?"}` : "No coin yet", enabled: false },
       { type: "separator" },
       { label: win?.isVisible() ? "Hide pillbud" : "Show pillbud", click: () => { toggleVisible(); tray.setContextMenu(menu()); } },
-      { label: "Text and sound effects", type: "radio", checked: s.mode !== "voice", click: () => set("mode", "text") },
-      { label: "Voice (ElevenLabs)", type: "radio", checked: s.mode === "voice", click: () => set("mode", "voice") },
-      { label: "Text voice", submenu: [["babble", "Babble (Animalese-style)"], ["beeps", "Character beeps"], ["blips", "Soft blips"]].map(([v, l]) => ({ label: l, type: "radio", checked: (s.textVoice || "beeps") === v, click: () => set("textVoice", v) })) },
+      // no talking voice (2026-11-06): sound effects or silent only; Mute below is "silent"
+      { label: "Sound effects", submenu: [["babble", "Babble (Animalese-style)"], ["beeps", "Character beeps"], ["blips", "Soft blips"]].map(([v, l]) => ({ label: l, type: "radio", checked: (s.textVoice || "beeps") === v, click: () => set("textVoice", v) })) },
       { type: "separator" },
       { label: "Tone: friendly", type: "radio", checked: s.tone !== "unhinged", click: () => set("tone", "friendly") },
       { label: "Tone: unhinged", type: "radio", checked: s.tone === "unhinged", click: () => set("tone", "unhinged") },
       { type: "separator" },
       { label: "Balloon look", submenu: BALLOON_LOOKS.map(([v, l]) => ({ label: l, type: "radio", checked: (s.balloonLook || "brand") === v, click: () => set("balloonLook", v) })) },
+      { label: "Set up pillbud again", click: () => setupStart(true) },
+      { label: "Coin details", submenu: [["full", "Show everything"], ["simple", "Just the read (tap for more)"]].map(([v, l]) => ({ label: l, type: "radio", checked: (s.balloonView || "full") === v, click: () => set("balloonView", v) })) },
       { label: "Balloon size", submenu: BALLOON_SIZES.map(([v, l]) => ({ label: l, type: "radio", checked: (s.balloonSize || "normal") === v, click: () => { set("balloonSize", v); applyBalloonSize(); } })) },
       { label: "Volume", submenu: [0.25, 0.5, 0.75, 1].map((v) => ({ label: `${v * 100}%`, type: "radio", checked: Math.abs(s.volume - v) < 0.01, click: () => set("volume", v) })) },
       { label: "Mute", type: "checkbox", checked: !!s.muted, click: () => set("muted", !s.muted) },
@@ -896,7 +972,7 @@ async function perf(s = 5) {
 }
 /** hide/show from the tray; while hidden the page stops animating */
 function toggleVisible() { if (!win) return; if (win.isVisible()) { win.hide(); send("visible", false); } else { win.showInactive(); send("visible", true); } }
-const loginArgs = () => [APP_DIR];
+const loginArgs = () => (app.isPackaged ? [] : [APP_DIR]); // the installed app starts as itself; from source, electron needs the folder
 const loginItem = () => app.getLoginItemSettings({ path: process.execPath, args: loginArgs() });
 function quit(why) { log(`quit (${why})`); app.quit(); }
 
@@ -926,7 +1002,8 @@ app.whenReady().then(() => {
   const ks = keyStatus();
   log(`keys present: ${Object.entries(ks).map(([k, v]) => `${k}=${v ? "yes" : "NO"}`).join(", ")}; X research: ${x.mode()}`);
   if (TEST) log("TEST MODE: off-screen window, no tray, no hotkey, audio saved to captures/audio and not played");
-  setTimeout(() => say(tone.greeting(S().tone), { mood: "wave", kind: "info", sfx: "hello" }), 600);
+  // first launch: the setup (how much to show, sound, mic); after that, the usual hello
+  setTimeout(() => { if (TEST || !setupStart()) say(tone.greeting(S().tone), { mood: "wave", kind: "info", sfx: "hello" }); }, 600);
 });
 app.on("will-quit", () => { globalShortcut.unregisterAll(); voice.stopVoices(); try { tabReader?.stop(); } catch { /* gone */ } try { screenWatcher?.stop(); } catch { /* gone */ } try { feed?.close(); } catch { /* gone */ } try { require("uiohook-napi").uIOhook.stop(); } catch { /* no hook */ } });
 app.on("window-all-closed", (e) => e.preventDefault()); // lives in the tray

@@ -246,3 +246,18 @@ body[data-look="sticker"] {
 body[data-look="sticker"] #title { font-size: 15px; }
 body[data-look="sticker"] #balloon::before { left: 19px; bottom: -26px; border-width: 26px 27px 0 0; }
 body[data-look="sticker"] #balloon::after { left: 19px; bottom: -26px; border-width: 26px 27px 0 0; }
+
+/* the coin details choice: "Everything" shows the whole card; "Just tell me" shows the read, with More details to open
+   the rest (asked on first launch, then in the tray under Coin details) */
+#choose { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; flex: none; }
+#choose button { flex: 1 1 auto; min-width: 40%; }
+#choose.hidden, #more.hidden { display: none; }
+#choose button { flex: 1; padding: 8px 10px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: inherit; font: inherit; font-size: .9em; font-weight: 600; cursor: pointer; }
+#choose button:hover { background: var(--line); }
+#more { flex: none; align-self: flex-start; margin-top: 8px; padding: 0; border: 0; background: none; color: inherit; opacity: .65; font: inherit; font-size: .85em; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+#more:hover { opacity: 1; }
+body[data-view="simple"]:not(.expanded) #scroll { display: none !important; }
+
+/* the chip's x: clear this coin until a different one is opened */
+#chip-x { flex: none; margin-left: 2px; padding: 2px; border: 0; background: none; color: inherit; opacity: .45; font-size: 10px; line-height: 1; cursor: pointer; }
+#chip-x:hover { opacity: 1; }

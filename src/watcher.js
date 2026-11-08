@@ -2,7 +2,9 @@
 //   price   - the pump.fun curve account while the coin is on the curve (exact), or the PumpSwap pool's two vaults
 //             after it bonds; other DEXes fall back to polling DexScreener every 5 s
 //   dev     - the dev wallets' token accounts: any drop is a sale, said right away
-//   whales  - the top 10 holders' token accounts: a drop of 0.5%+ of supply is a whale selling
+//   top     - the top 10 holders' token accounts: a drop of 0.5%+ of supply is a top holder selling
+//   bundle  - the launch bundle's and snipers' wallets still holding (added once the launch is read): a drop of 0.2%+
+//             of supply is the bundle selling (2026-11-06: the community watches bundles, not "whales")
 // Reactions carry real numbers. Each alert is timed against its block (getBlockTime) to measure alert latency.
 const { PublicKey } = require("@solana/web3.js");
 const { pairNow, dexscreener } = require("./research/market");
@@ -71,10 +73,11 @@ function makeWatcher(onReaction, log = () => {}, opts = {}) {
       const bal = v ? uiAmount(v) : 0; // a closed account (sold out) comes back null
       if (!isFinite(bal)) return;
       const sold = last != null ? last - bal : 0;
-      const min = cur.supply * (kind === "dev" ? 0.0005 : settings().whalePct / 100);
+      const min = cur.supply * (kind === "dev" ? 0.0005 : kind === "bundle" ? 0.002 : settings().whalePct / 100);
       if (last != null && sold >= min) {
         const soldPct = pctStr((sold / cur.supply) * 100), holdsPct = pctStr((bal / cur.supply) * 100);
         if (kind === "dev") react(bal < cur.supply * 0.0001 ? "devRug" : "devSell", { pct: soldPct, holds: holdsPct }, bal < cur.supply * 0.0001 ? "rugged" : "panic", slot, at);
+        else if (kind === "bundle") react("bundleSell", { pct: soldPct, holds: holdsPct }, "panic", slot, at);
         else react("whaleSell", { pct: soldPct, holds: holdsPct }, "panic", slot, at);
       }
       last = bal;
@@ -133,7 +136,22 @@ function makeWatcher(onReaction, log = () => {}, opts = {}) {
     return { changePct: Math.round(ch * 10) / 10, overMin: Math.max(1, Math.round((now - first.t) / 60000)), mc: last.mc };
   }
 
-  return { watch, stop, current: () => cur, points: () => points, liveState };
+  /** watch more sellers once they're known (the launch bundle and snipers): their token accounts, from their wallets */
+  async function watchGroup(wallets, kind, mint, program) {
+    const feed = feedNow();
+    if (!feed || !cur || cur.mint !== mint || !wallets.length) return 0;
+    const me = cur;
+    const ATA = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+    const accs = wallets.slice(0, 15).map((w) => { try { return PublicKey.findProgramAddressSync([new PublicKey(w).toBuffer(), new PublicKey(program).toBuffer(), new PublicKey(mint).toBuffer()], ATA)[0].toBase58(); } catch { return null; } }).filter(Boolean);
+    const got = await rpc("getMultipleAccounts", [accs, { encoding: "jsonParsed" }]).catch(() => null);
+    if (cur !== me) return 0;
+    let n = 0;
+    accs.forEach((a, i) => { const bal = uiAmount(got?.value?.[i]); if (bal > 0) { watchSeller(feed, a, bal, kind); n++; } });
+    log(`watching ${n} ${kind} wallets that still hold ${me.symbol}`);
+    return n;
+  }
+
+  return { watch, watchGroup, stop, current: () => cur, points: () => points, liveState };
 }
 
 // for the line templates and the tests

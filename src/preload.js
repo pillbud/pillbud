@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld("pillbud", {
   askAudio: (data, type) => ipcRenderer.invoke("ask-audio", { data, type }),
   sprites: () => ipcRenderer.invoke("sprites"),
   prefs: () => ipcRenderer.invoke("prefs"),
+  choose: (step, value) => ipcRenderer.send("choose", { step, value }), // a setup button
+  setMic: (id, label) => ipcRenderer.send("set-mic", { id, label }),
+  clearCoin: () => ipcRenderer.send("clear-coin"), // the chip's x: forget this coin until a different one is opened
   sfxExport: (name, wav) => ipcRenderer.send("sfx-export", { name, wav }),
   log: (s) => ipcRenderer.send("log", String(s)),
 });

@@ -9,9 +9,12 @@ const { settings } = require("./env");
 const PRO = new Set(["legit", "deep", "elevenlabs", "lookCloser", "probe"]); // probe = the product test (a hidden browser tries the coin's app)
 
 /** may this install use the feature right now? */
+// Everything is free (2026-11-06): the $PILLBUD creator fees pay for the research it runs (Claude, X, Helius).
+// The gate stays so a limit can come back without touching the callers; config.json "tier": "free" still turns the
+// pro set off, for testing.
 function can(feature) {
   const tier = settings().tier || "pro";
-  return !PRO.has(feature) || tier === "pro";
+  return !PRO.has(feature) || tier !== "free";
 }
 
 module.exports = { can, PRO };

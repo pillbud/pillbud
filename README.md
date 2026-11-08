@@ -4,7 +4,9 @@
 
 A desktop buddy for Solana memecoins. Open any coin in your browser and pillbud reads it in seconds: what the coin is about, the source behind it, whether the story is real, whether the holders are fair, and what just changed. It sits on your desktop and speaks up when something matters.
 
-**Site:** [pillbud.fun](https://pillbud.fun) · **X:** [@pillbud](https://x.com/pillbud)
+**Site:** [pillbud.fun](https://pillbud.fun) · **X:** [@pillbud](https://x.com/pillbud) · **Download:** [latest release](https://github.com/pillbud/pillbud/releases/latest) (Windows 10 and 11)
+
+The installer needs no keys: the installed app runs its research through pillbud's hosted service, which holds the API keys and is paid for by the creator fees.
 
 pillbud is read-only. It never connects to a wallet, never signs anything and never trades.
 
@@ -56,9 +58,9 @@ Works with pump.fun, DexScreener, GMGN, Axiom, Photon, Birdeye and Solscan.
 
 - Screen and tab reading happen on your PC. Only a coin address that pillbud finds leaves it.
 - The coin address goes to Helius (Solana data), DexScreener, pump.fun and, if you add a key, an X search API.
-- Facts about the coin go to Claude to write the read. In voice mode, spoken lines go to ElevenLabs.
+- Facts about the coin go to Claude to write the read. A question you ask out loud goes to ElevenLabs to become text.
 - The product test runs in a hidden browser with its own in-memory session: no cookies, no wallet, no extensions. Downloads are cancelled and never run.
-- Your keys stay in `.env` on your PC. Nothing is sent anywhere else.
+- In the installed app these calls pass through pillbud's hosted service, which adds the API keys and forwards them. It sees the same coin facts, nothing from your screen. Run from source with your own keys in `.env` and it talks to the providers directly.
 
 ## Run it from source
 
@@ -71,7 +73,7 @@ npm install
 copy .env.example .env
 ```
 
-Open `.env` and add your keys. Two are required:
+Without keys, it uses pillbud's hosted service like the installed app does. To use your own, open `.env` and add them. These two go together:
 
 - `ANTHROPIC_API_KEY` from [console.anthropic.com](https://console.anthropic.com)
 - `HELIUS_RPC_URL` from [helius.dev](https://www.helius.dev) (the free plan works)
@@ -82,7 +84,9 @@ Open `.env` and add your keys. Two are required:
 npm start
 ```
 
-pillbud appears at the bottom right of your screen. Open a coin in your browser and it starts reading. You pay for your own API usage.
+pillbud appears at the bottom right of your screen. Open a coin in your browser and it starts reading. With your own keys, you pay for your own API usage.
+
+To build the Windows installer yourself: `npm run dist` (it lands in `dist/`).
 
 ### Settings
 

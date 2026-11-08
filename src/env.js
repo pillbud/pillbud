@@ -6,6 +6,13 @@ const path = require("node:path");
 
 const APP_DIR = path.join(__dirname, "..");
 const LOCAL_ENV = path.join(APP_DIR, ".env");
+// where the app may write (prefs, the install token, caches, the cost log): the app folder when run from source, the
+// user's own app-data folder when installed (an installed app can't write inside its own folder)
+const DATA_DIR = (() => {
+  if (process.env.PILLBUD_DATA) return process.env.PILLBUD_DATA;
+  try { const { app } = require("electron"); if (app && app.isPackaged) return app.getPath("userData"); } catch { /* plain node */ }
+  return APP_DIR;
+})();
 const NEEDED = ["ANTHROPIC_API_KEY", "ELEVENLABS_API_KEY", "HELIUS_RPC_URL"];
 
 function parse(file) {
@@ -63,7 +70,7 @@ const DEFAULTS = {
   dnd: false,                        // do not disturb: no automatic takes or alerts, only answers when asked
 };
 
-const PREFS_DEFAULT = path.join(APP_DIR, "prefs.json");
+const PREFS_DEFAULT = path.join(DATA_DIR, "prefs.json");
 const prefsFile = () => process.env.PILLBUD_PREFS || PREFS_DEFAULT; // test instances use their own (never the main one)
 function readJson(f) { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return {}; } }
 /** defaults < config.json (developer settings) < prefs.json (the user's tray choices) */
@@ -79,7 +86,29 @@ function setPref(k, v) {
   return settings();
 }
 
+// Hosted mode (the downloaded app): with no keys of its own, pillbud runs its research through pillbud-api, which
+// holds the keys and is paid for by the $PILLBUD creator fees. Each install makes one random token, kept in DATA_DIR.
+const API = process.env.PILLBUD_API || "https://pillbud-api.vercel.app";
+function installToken() {
+  const f = path.join(DATA_DIR, "install.json");
+  let j = readJson(f);
+  if (!/^pb_[a-f0-9]{32}$/.test(j.token || "")) {
+    j = { token: "pb_" + require("node:crypto").randomBytes(16).toString("hex"), made: new Date().toISOString() };
+    try { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(f, JSON.stringify(j, null, 2)); } catch { /* a fresh token next run */ }
+  }
+  return j.token;
+}
+const HOSTED = process.env.PILLBUD_HOSTED === "1" || !keys.ANTHROPIC_API_KEY || !keys.HELIUS_RPC_URL;
+if (HOSTED) {
+  const t = installToken();
+  Object.assign(keys, {
+    ANTHROPIC_API_KEY: t, ANTHROPIC_BASE_URL: `${API}/anthropic`,
+    HELIUS_RPC_URL: `${API}/api/helius?t=${t}`, HELIUS_WS_URL: `${API.replace(/^http/, "ws")}/api/feed?t=${t}`,
+    ELEVENLABS_API_KEY: t, ELEVENLABS_STT_URL: `${API}/api/stt`,
+  });
+}
+
 /** which keys were found (names only, never values) */
 const keyStatus = () => Object.fromEntries(NEEDED.map((k) => [k, !!keys[k]]));
 
-module.exports = { keys, settings, setPref, keyStatus, APP_DIR };
+module.exports = { keys, settings, setPref, keyStatus, APP_DIR, DATA_DIR, HOSTED };

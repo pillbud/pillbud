@@ -78,7 +78,7 @@ async function funderOf(wallet) {
 const fs = require("node:fs");
 const path = require("node:path");
 let busyMem = null, saveTimer = null;
-const busyFile = () => path.join(require("../env").APP_DIR, "cache", "wallet-activity.json");
+const busyFile = () => path.join(require("../env").DATA_DIR, "cache", "wallet-activity.json");
 function busyStore() {
   if (!busyMem) { try { busyMem = new Map(Object.entries(JSON.parse(fs.readFileSync(busyFile(), "utf8")))); } catch { busyMem = new Map(); } }
   return busyMem;
@@ -393,7 +393,9 @@ async function devHistory(fetcher, devWallets, thisMint) {
     // now worth $3k to $6k)
     if (c.complete && c.mcUsd != null && c.mcUsd < 10_000) c.ended = "dead";
     else if (c.complete) c.ended = "bonded";
-    else if (c.exit && c.exit.soldPct >= 1 && c.exit.soldWithinMin != null && c.exit.soldWithinMin <= 180 && (fell == null || fell < 0.4 || c.mcUsd < 10_000)) c.ended = "rugged";
+    // a rug is the dev dumping a real share (10%+ of the supply) early. A tweet deployer selling a small dev buy fast and
+    // moving on is how those coins work, not a rug (2026-11-06): that coin just faded
+    else if (c.exit && c.exit.soldPct >= 10 && c.exit.soldWithinMin != null && c.exit.soldWithinMin <= 180 && (fell == null || fell < 0.4 || c.mcUsd < 10_000)) c.ended = "rugged";
     else if (c.mcUsd != null && c.mcUsd < 8_000 && (!c.lastTradeAt || now - c.lastTradeAt > 12 * 36e5)) c.ended = "dead";
     else if (c.exit === undefined && c.mcUsd != null && c.mcUsd < 8_000) c.ended = "dead";
     else c.ended = "alive";
