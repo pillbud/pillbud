@@ -4,12 +4,14 @@
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
+// helper exes live outside the app archive in the installed app (asarUnpack), so they can be started
+const NATIVE = path.join(__dirname, "native").replace(/app\.asar(?=[\\/])/, "app.asar.unpacked");
 const { fromUrl } = require("./detect");
 
 /** the compiled helper (src/native/pillbud-tabreader.exe), built with the C# compiler that ships with Windows' .NET
  *  Framework if it's missing. null = use the PowerShell script instead (same behaviour, ~5x more memory). */
 function helperExe(log) {
-  const out = path.join(__dirname, "native", "pillbud-tabreader2.exe"); // v2: UTF-8 output
+  const out = path.join(NATIVE, "pillbud-tabreader2.exe"); // v2: UTF-8 output
   if (fs.existsSync(out)) return out;
   try {
     const { execFileSync } = require("node:child_process");

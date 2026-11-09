@@ -9,6 +9,8 @@
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
+// helper exes live outside the app archive in the installed app (asarUnpack), so they can be started
+const NATIVE = path.join(__dirname, "native").replace(/app\.asar(?=[\\/])/, "app.asar.unpacked");
 const { isAddress, resolveMint } = require("./detect");
 const { getJson } = require("./research/net");
 
@@ -93,7 +95,7 @@ async function resolveHints(h, fetcher, stableTickers) {
 }
 
 function helperExe(log) {
-  const out = path.join(__dirname, "native", "pillbud-screenwatch2.exe"); // v2: app allowlist, per-window video skip
+  const out = path.join(NATIVE, "pillbud-screenwatch2.exe"); // v2: app allowlist, per-window video skip
   if (fs.existsSync(out)) return out;
   try {
     const { execFileSync } = require("node:child_process");

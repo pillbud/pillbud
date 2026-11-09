@@ -1,6 +1,6 @@
 {
   "name": "pillbud",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "pillbud: a desktop buddy that reads Solana memecoin charts, researches the coin you're on and talks about it.",
   "main": "src/main.js",
@@ -25,7 +25,7 @@
     "appId": "fun.pillbud.app",
     "productName": "pillbud",
     "copyright": "pillbud",
-    "asar": false,
+    "asar": true,
     "npmRebuild": false,
     "directories": {
       "output": "dist",
@@ -60,7 +60,10 @@
       "createStartMenuShortcut": true,
       "shortcutName": "pillbud",
       "deleteAppDataOnUninstall": false
-    }
+    },
+    "asarUnpack": [
+      "src/native/*.exe"
+    ]
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.4.0",
