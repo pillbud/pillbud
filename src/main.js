@@ -73,7 +73,12 @@ function metric(m) { state.metrics.push({ at: Date.now(), ...m }); if (state.met
 // The window grows to fit the bigger balloon, from its bottom-left corner, so the buddy never moves.
 const BALLOON_SIZES = [["small", "Small", 0.9], ["normal", "Normal", 1], ["large", "Large", 1.2], ["xl", "Extra large", 1.4]];
 // Balloon look (tray, then Balloon look): colours, corners, shadow and type; the layout is the same in every look
-const BALLOON_LOOKS = [["brand", "pillbud"], ["classic", "Classic (Windows 98)"], ["dark", "Dark"], ["white", "Clean white"], ["mint", "Mint"], ["toy", "Toy bubble"], ["game", "Game dialog"], ["sticker", "Sticker"]];
+// (2026-11-09: cut to the five that look clearly different; Clean white, Mint and Sticker fall back to pillbud)
+const BALLOON_LOOKS = [["brand", "pillbud"], ["classic", "Classic (Windows 98)"], ["dark", "Dark"], ["toy", "Toy bubble"], ["game", "Game dialog"]];
+// Skins (tray, then pillbud colour / Accessory): any colour wears any accessory. The frames live in brand/skins/<colour>
+// and brand/acc/<accessory> (the accessory is a layer drawn over the colour); mint is brand/sprites.
+const SKIN_COLOURS = [["mint", "Mint"], ["bubblegum", "Bubblegum"], ["sky", "Sky"], ["lilac", "Lilac"], ["butter", "Butter"]];
+const ACCESSORIES = [["none", "None"], ["shades", "Shades"], ["beanie", "Beanie"], ["crown", "Crown"], ["phones", "Headphones"]];
 const balloonZoom = () => (BALLOON_SIZES.find(([k]) => k === S().balloonSize) || BALLOON_SIZES[1])[2];
 function fullSize() {
   const z = balloonZoom(), wa = screen.getPrimaryDisplay().workArea;
@@ -116,7 +121,7 @@ function createWindow() {
 ipcMain.handle("sprites", () => { const p = spritePack(S().character); log(`character: ${p.manifest.name || "?"} (${p.manifest.kind}) from ${p.from}`); return p; });
 ipcMain.handle("prefs", () => publicPrefs());
 // balloonLook: pillbud ("brand") is the default look (2026-11-05)
-const publicPrefs = () => { const s = S(); return { mode: s.mode, textVoice: s.textVoice, tone: s.tone, volume: s.volume, muted: s.muted, dnd: s.dnd, balloonSize: s.balloonSize || "normal", balloonZoom: balloonZoom(), balloonLook: BALLOON_LOOKS.some(([k]) => k === s.balloonLook) ? s.balloonLook : "brand", balloonView: s.balloonView || null, micId: s.micId || null, test: TEST }; };
+const publicPrefs = () => { const s = S(); return { mode: s.mode, textVoice: s.textVoice, tone: s.tone, volume: s.volume, muted: s.muted, dnd: s.dnd, balloonSize: s.balloonSize || "normal", balloonZoom: balloonZoom(), balloonLook: BALLOON_LOOKS.some(([k]) => k === s.balloonLook) ? s.balloonLook : "brand", skinColour: SKIN_COLOURS.some(([k]) => k === s.skinColour) ? s.skinColour : "mint", skinAcc: ACCESSORIES.some(([k]) => k === s.skinAcc) ? s.skinAcc : "none",balloonView: s.balloonView || null, micId: s.micId || null, test: TEST }; };
 // Coin details: "full" = the whole card, "simple" = just the read with More details (2026-11-06). Asked on the
 // first launch in the balloon; changed later in the tray.
 let rebuildTray = () => {};
@@ -847,6 +852,8 @@ function setupTray() {
       { label: "Tone: friendly", type: "radio", checked: s.tone !== "unhinged", click: () => set("tone", "friendly") },
       { label: "Tone: unhinged", type: "radio", checked: s.tone === "unhinged", click: () => set("tone", "unhinged") },
       { type: "separator" },
+      { label: "pillbud colour", submenu: SKIN_COLOURS.map(([v, l]) => ({ label: l, type: "radio", checked: (s.skinColour || "mint") === v, click: () => set("skinColour", v) })) },
+      { label: "Accessory", submenu: ACCESSORIES.map(([v, l]) => ({ label: l, type: "radio", checked: (s.skinAcc || "none") === v, click: () => set("skinAcc", v) })) },
       { label: "Balloon look", submenu: BALLOON_LOOKS.map(([v, l]) => ({ label: l, type: "radio", checked: (s.balloonLook || "brand") === v, click: () => set("balloonLook", v) })) },
       { label: "Set up pillbud again", click: () => setupStart(true) },
       { label: "Coin details", submenu: [["full", "Show everything"], ["simple", "Just the read (tap for more)"]].map(([v, l]) => ({ label: l, type: "radio", checked: (s.balloonView || "full") === v, click: () => set("balloonView", v) })) },

@@ -90,7 +90,7 @@ To build the Windows installer yourself: `npm run dist` (it lands in `dist/`).
 
 ### Settings
 
-Right-click the tray icon for text or voice mode, tone, the balloon's look and size, volume, mute and do not disturb. Developer settings go in `config.json` (copy `config.example.json`).
+Right-click the tray icon for text or voice mode, tone, pillbud's colour and accessory (5 colours, 4 accessories, any mix), the balloon's look and size, volume, mute and do not disturb. Developer settings go in `config.json` (copy `config.example.json`).
 
 ### The browser extension (optional)
 

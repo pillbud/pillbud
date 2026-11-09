@@ -16,6 +16,8 @@ class Character {
   async load() {
     const pack = await window.pillbud.sprites();
     this.m = pack.manifest; this.dir = pack.dir; this.files = pack.files; this.kind = this.m.kind;
+    this.skins = pack.skins || { colours: {}, accs: {} }; this.colour = "mint"; this.acc = null;
+    if (this.want) this.setSkin(...this.want); // prefs that arrived before the art did
     if (this.m.size) { // the buddy's box follows the art (V3: 225 x 250); the balloon sits above it (style.css)
       this.el.style.width = `${this.m.size[0]}px`; this.el.style.height = `${this.m.size[1]}px`;
       const box = this.el.parentElement; if (box) { box.style.width = `${this.m.size[0]}px`; box.style.height = `${this.m.size[1]}px`; }
@@ -86,10 +88,30 @@ class Character {
    *  holds still between bursts instead of repainting 24 times a second. Time only advances while it's ticking (a held
    *  pause doesn't jump ahead). One-shots (loop: false) end on their last frame: rugged and sleep stay there, the rest
    *  go back to talk or idle. */
+  /** skins (frame packs only): the colour swaps the whole frame set, the accessory is a second image layered on top,
+   *  frame for frame. Unknown names (art not installed) fall back to mint / none. */
+  setSkin(colour, acc) {
+    this.want = [colour, acc];
+    if (!this.skins) return;
+    colour = colour && this.skins?.colours?.[colour] ? colour : "mint";
+    acc = acc && acc !== "none" && this.skins?.accs?.[acc] ? acc : null;
+    if (colour === this.colour && acc === this.acc) return;
+    this.colour = colour; this.acc = acc; this.loaded = new Set();
+    if (this.kind === "frames" && this.img) this.set(this.state, true);
+  }
+  baseUrl(f) { return this.colour !== "mint" ? `${this.skins.colours[this.colour]}/${f.replace(/\.png$/, ".webp")}` : `${this.dir}/${f}`; }
+  overUrl(f) { return this.acc ? `${this.skins.accs[this.acc]}/${f.replace(/\.png$/, ".webp")}` : null; }
+
   playFrames(state) {
     const d = this.m.states[state];
-    if (!this.img) { this.img = document.createElement("img"); this.img.draggable = false; this.img.alt = ""; Object.assign(this.img.style, { width: "100%", height: "100%", display: "block" }); this.el.replaceChildren(this.img); }
-    const urls = d.frames.map((f) => `${this.dir}/${f}`);
+    if (!this.img) {
+      const mk = () => { const i = document.createElement("img"); i.draggable = false; i.alt = ""; Object.assign(i.style, { width: "100%", height: "100%", display: "block", position: "absolute", left: "0", top: "0", pointerEvents: "none" }); return i; };
+      this.img = mk(); this.over = mk();
+      if (getComputedStyle(this.el).position === "static") this.el.style.position = "relative";
+      this.el.replaceChildren(this.img, this.over);
+    }
+    const urls = d.frames.map((f) => this.baseUrl(f)), overs = this.acc ? d.frames.map((f) => this.overUrl(f)) : null;
+    this.over.style.display = overs ? "block" : "none";
     this.preload(state);
     const token = (this.playToken = (this.playToken || 0) + 1), fps = d.fps || 24;
     let t = 0, last = performance.now(), shown = -1;
@@ -103,10 +125,10 @@ class Character {
           if (shown === i) { if (this.state === state && state !== "rugged" && state !== "sleep") this.set(this.talking && this.has("talk") ? "talk" : "idle"); return; }
         } else i %= urls.length;
       }
-      if (i !== shown) { this.img.src = urls[i]; shown = i; }
+      if (i !== shown) { this.img.src = urls[i]; if (overs) this.over.src = overs[i]; shown = i; }
       requestAnimationFrame(step);
     };
-    this.img.src = urls[0]; shown = 0;
+    this.img.src = urls[0]; if (overs) this.over.src = overs[0]; shown = 0;
     requestAnimationFrame(step);
   }
   /** load a state's frames into the image cache ahead of time (the first loop doesn't stutter) */
@@ -114,7 +136,7 @@ class Character {
     this.loaded = this.loaded || new Set();
     if (this.loaded.has(state) || !this.m.states?.[state]?.frames) return;
     this.loaded.add(state);
-    for (const f of this.m.states[state].frames) { const i = new Image(); i.decoding = "async"; i.src = `${this.dir}/${f}`; }
+    for (const f of this.m.states[state].frames) for (const u of [this.baseUrl(f), this.overUrl(f)]) if (u) { const i = new Image(); i.decoding = "async"; i.src = u; }
   }
 
   /** talking on/off (mouth moves on top of any state that supports it) */

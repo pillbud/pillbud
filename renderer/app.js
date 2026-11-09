@@ -19,6 +19,7 @@ function applyPrefs(p) {
   document.documentElement.style.setProperty("--z", String(prefs.balloonZoom || 1)); // Balloon size (tray)
   document.body.dataset.look = prefs.balloonLook || "brand"; // Balloon look (tray); pillbud is the default
   document.body.dataset.view = prefs.balloonView || "full"; // Coin details (tray): everything, or just the read
+  bud.setSkin?.(prefs.skinColour, prefs.skinAcc); // pillbud colour + Accessory (tray)
   updateMore();
 }
 window.pillbud.prefs().then(applyPrefs);

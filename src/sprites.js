@@ -44,7 +44,15 @@ function spritePack(character) {
   const names = [manifest.svg, manifest.css, manifest.animations, ...Object.values(Array.isArray(manifest.states) ? {} : manifest.states || {}).filter((v) => typeof v === "string")].filter(Boolean);
   const files = {};
   for (const n of names) { try { files[n] = fs.readFileSync(path.join(dir, n), "utf8"); } catch { /* missing art: that state falls back */ } }
-  return { manifest, dir: url(dir), files, from: dir };
+  return { manifest, dir: url(dir), files, from: dir, skins: { colours: skinDirs("skins"), accs: skinDirs("acc") } };
+}
+
+/** skins: brand/skins/<colour> (a whole frame set) and brand/acc/<accessory> (a layer drawn over it), same frame names
+ *  as brand/sprites but .webp. { name: file URL } for each folder that has frames. */
+function skinDirs(sub) {
+  const d = path.join(BRAND, sub);
+  try { return Object.fromEntries(fs.readdirSync(d, { withFileTypes: true }).filter((e) => e.isDirectory() && fs.existsSync(path.join(d, e.name, "frames"))).map((e) => [e.name, url(path.join(d, e.name))])); }
+  catch { return {}; }
 }
 
 module.exports = { spritePack };

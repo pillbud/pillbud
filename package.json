@@ -1,6 +1,6 @@
 {
   "name": "pillbud",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "pillbud: a desktop buddy that reads Solana memecoin charts, researches the coin you're on and talks about it.",
   "main": "src/main.js",
@@ -38,7 +38,9 @@
       "renderer/**/*",
       "assets/**/*",
       "extension/**/*",
-      "brand/sprites/**/*"
+      "brand/sprites/**/*",
+      "brand/skins/**/*",
+      "brand/acc/**/*"
     ],
     "win": {
       "target": [
